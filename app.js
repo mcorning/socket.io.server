@@ -23,52 +23,59 @@ let visitors = new Map();
 io.on('connection', function (socket) {
   visitors.set(socket.id, '');
   console.log(socket.id, 'connected');
+  console.log('ROOMS:', rooms);
 
   // Rooms
-  socket.on('open', function (data, cb) {
+  socket.on('open', function (roomId, cb) {
     cb({
-      msg: `Stay safe today, ${data}`,
+      msg: `Keep your people safe today, ${roomId}`,
       socketId: socket.id,
     });
-    socket.join(data);
-    console.log(data, 'opening');
-    rooms.set(socket.id, data);
+    socket.join(roomId);
+    console.log(new Date(), 'opening', roomId);
+    rooms.set(socket.id, roomId);
     console.log('ROOMS:', rooms);
   });
 
-  socket.on('close', function (data, cb) {
+  socket.on('close', function (roomId, cb) {
     cb({
-      msg: `Well done, ${data.roomId}`,
+      msg: `Well done, ${roomId}`,
       socketId: socket.id,
     });
     socket.leave(data.roomId);
     console.log(data, 'closing.');
-    rooms.set(socket.id, data.roomId);
+    rooms.set(socket.id, roomId);
   });
 
   // Visitors
-  socket.on('visit', function (data, cb) {
+  socket.on('enterRoom', function (data, cb) {
     cb({
       msg: `Welcome to ${data.roomId}, ${data.yourId}.`,
       socketId: socket.id,
     });
     socket.join(data.roomId);
-    io.to(data.roomId).emit('entered');
-    console.log(data, 'visited');
+    console.log(new Date(), data.message);
     visitors.set(socket.id, data.yourId);
-    socket
-      .to(data.roomId)
-      .emit('newVisitor', {
-        visitor: data.yourId,
-        sentTime: data.sentTime,
-        message: 'Visiting',
-      });
+    console.log(visitors);
+    // disambiguate enterRoom event from the event handler in the Room, check-in
+    io.to(data.roomId).emit('check-in', {
+      visitor: data.yourId,
+      sentTime: data.sentTime,
+      socketId: socket.id,
+    });
   });
 
-  socket.on('leave', function (data, cb) {
-    cb(`See you next time, ${data}`);
+  socket.on('leaveRoom', function (data, cb) {
+    cb(`See you next time, ${data.yourId}`);
+    console.log(new Date(), visitors.get(socket.id), 'has left the building');
+
+    // departed handled by Room to list the timestamped departure
+    io.to(data.roomId).emit('check-out', {
+      visitor: data.yourId,
+      sentTime: data.sentTime,
+      socketId: socket.id,
+    });
     socket.leave(data.roomId);
-    console.log(visitors.get(socket.id), 'has left the building');
   });
 
   socket.on('removeRoom', () => {
@@ -77,13 +84,15 @@ io.on('connection', function (socket) {
   });
   socket.on('removeVisitor', () => {
     visitors.delete(socket.id);
+    console.log(new Date(), visitors);
     socket.disconnect();
   });
 
-  socket.on('disconnecting', () => {
-    const rooms = Object.keys(socket.rooms);
-    // the rooms array contains at least the socket ID
-    console.log('Sockets rooms', rooms);
+  socket.on('disconnect', () => {
+    console.log(
+      new Date(),
+      `Disconnecting Socket ${socket.id} (${visitors.get(socket.id)})`
+    );
   });
 
   // socket.emit('newMessage', 'I am here');
