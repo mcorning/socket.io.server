@@ -44,15 +44,17 @@ io.on('connection', function (socket) {
   console.log('roomMap:', roomMap);
 
   //Alerts
-  socket.on('alert', function (data, cb) {
+  socket.on('alertRooms', function (data, cb) {
     cb({
       msg: `Notifying all rooms you occupied in last 14 days`,
       socketId: socket.id,
     });
+    console.log('Alert Dates:\n', data.message);
     roomMap.set(socket.id, data.room);
     join(socket, data.room);
     io.to(data.room).emit('exposureAlert', {
       visitor: data.visitor,
+      message: data.message,
       sentTime: data.sentTime,
       socketId: socket.id,
     });
@@ -64,6 +66,8 @@ io.on('connection', function (socket) {
       socketId: socket.id,
     });
     roomMap.set(socket.id, data.room);
+    alertMap.set(data.visitor, data.sentTime);
+
     join(socket, data.room);
     console.log(new Date(), 'opening', data.room);
     console.log('ROOMS:', roomMap);
@@ -92,7 +96,10 @@ io.on('connection', function (socket) {
     socket.join(data.room);
     console.log(new Date(), data.message);
     visitorMap.set(socket.id, data.visitor);
-    console.log(visitorMap);
+    console.log('Visitor Map', visitorMap);
+    console.log();
+    alertMap.set(data.visitor, data.sentTime);
+    console.log('Alert Map', alertMap);
     // disambiguate enterRoom event from the event handler in the Room, check-in
     // handled by Room.handleMessage()
     io.to(data.room).emit('check-in', {
