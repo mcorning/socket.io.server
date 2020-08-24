@@ -45,53 +45,26 @@ const leave = (socket, room) => {
       `Rooms after socket ${socket.id} (${socket.room})left:`
     );
     console.log(rooms);
-    // console.log('Visitors:');
-    // console.log(visitorMap);
   });
 };
-let connections = [];
 
 function alertVisitor(value, key) {
   console.log(`Alerting ${value} on socket ${key}`);
   io.to(key).emit('exposureAlert', `${value}, you may have been exposed.`);
 }
 
-io.on('connection', function (socket) {
-  connections.push(socket.id);
+// Heavy lifting below
+//===================================================================================//
 
+io.on('connection', function (socket) {
   //Alerts
   socket.on('alertRooms', function (data, cb) {
-    cb({
-      msg: `Notifying all rooms you occupied in last 14 days`,
-      socketId: socket.id,
+    cb(`Notifying all rooms you occupied in last 14 days`);
+
+    // Visitor message includes the Room names to alert
+    data.message.map((v) => {
+      io.in(v[0]).emit('exposureAlert', v[1]);
     });
-
-    // const exposed = io.of('/exposed');
-    // io.of('/exposed').clients((error, clients) => {
-    //   if (error) throw error;
-    //   console.log(clients); // => [PZDoMHjiu8PYfRiKAAAF, Anw2LatarvGVVXEIAAAD]
-    // });
-
-    join(socket, data.room);
-
-    // this will alert everybody currently in the Room.
-    // this may not be what we want, but it does show everybody that the system
-    // can send alerts. Whether it is a valid alert is a different question.
-    io.to(data.room).emit('exposureAlert', {
-      room: data.room,
-      message: data.message,
-      sentTime: data.sentTime,
-      socketId: socket.id,
-    });
-
-    // Phase 1 of the Alert protocol:
-    // Visitor sends list of room/dates
-    console.log(socket.id, JSON.stringify(data.message));
-    console.dir('connections', connections);
-    // console.log('visitorMap entries', visitorMap.entries());
-    // console.log('alertMap entries', alertMap.entries());
-    // match room/date with each visitor room/date entries from their travels
-    // visitorMap.forEach(alertVisitor);
   });
 
   // Visitors
@@ -99,7 +72,14 @@ io.on('connection', function (socket) {
   socket.on('enterRoom', (data) => {
     socket.visitor = data.visitor;
     socket.payload = data;
-    socket.join(data.room);
+
+    // add this socketId from the Visitor to all others used.
+    // this way you can map all connnected sockets to individual Visitors
+    // To alert this visitor, send the Alerts to this room (lower case to distinguish from real Rooms).
+    socket.join(data.visitor);
+
+    // Enter the Room. As others enter, you will see a notification they, too, joined.
+    join(socket, data.room);
 
     // disambiguate enterRoom event from the event handler in the Room, check-in
     // handled by Room.handleMessage()
@@ -108,6 +88,19 @@ io.on('connection', function (socket) {
       sentTime: data.sentTime,
       socketId: socket.id,
     });
+    io.in(data.room).send('Visitor entered Room');
+  });
+  socket.on('leaveRoom', (data) => {
+    leave(socket, data.room);
+
+    // disambiguate enterRoom event from the event handler in the Room, check-in
+    // handled by Room.handleMessage()
+    io.to(data.room).emit('check-out', {
+      visitor: data.visitor,
+      sentTime: data.sentTime,
+    });
+
+    io.in(data.room).send('Visitor left Room');
   });
 
   // Rooms
@@ -135,11 +128,23 @@ io.on('connection', function (socket) {
     socket.disconnect();
   });
 
+  socket.on('listAllSockets', (cb) => {
+    console.log('Remaining connections:');
+    console.log(io.sockets.clients().connected);
+    cb(io.sockets.clients().connected);
+  });
+
   socket.on('disconnect', () => {
+    console.log(new Date(), `Disconnecting Socket ${socket.id} `);
+  });
+
+  socket.on('disconnectAll', () => {
     console.log(
       new Date(),
-      `Disconnecting Socket ${socket.id} (${socket.visitor}/${socket.room})`
+      `${data} is disconnecting all ${io.sockets.connected} Sockets...`
     );
+    Object.values(io.sockets.clients().connected).map((v) => v.disconnect());
+    console.log('Remaining connections :>> ', io.sockets.connected);
   });
 
   // socket.emit('newMessage', 'I am here');
