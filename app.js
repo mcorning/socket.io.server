@@ -11,76 +11,53 @@ app.get('/', function (req, res) {
   res.sendFile(__dirname + '/index.html');
 });
 
-let roomMap = new Map();
-let visitorMap = new Map();
-let alertMap = new Map('', []);
+// let roomMap = new Map();
+// let visitorMap = new Map();
+// let alertMap = new Map('', []);
 
-let updateAlertMap = function (data) {
-  if (!alertMap.has(data.visitor)) {
-    alertMap.set(data.visitor, []);
-  }
-  alertMap.get(data.visitor).push({ room: data.room, date: data.sentTime });
-  // console.log('Alert Map', alertMap);
-};
+// let updateAlertMap = function (data) {
+//   if (!alertMap.has(data.visitor)) {
+//     alertMap.set(data.visitor, []);
+//   }
+//   alertMap.get(data.visitor).push({ room: data.room, date: data.sentTime });
+//   // console.log('Alert Map', alertMap);
+// };
 
 // This server handles messages from Rooms and Visitors
 // Rooms
 // Room comes onine and gets connected to server
 // Room's mounted lifecycle method updates the server with its Room ID and the 'open' event
 // NOTE: Rooms may be managed by a person. If so, they may be subject to an exposure alert (or they may trigger one)
-const join = (socket, value) => {
-  socket.join(value, () => {
-    // let rooms = Object.keys(socket.rooms);
-    // console.log(new Date(), 'Rooms after socket joined:');
-    // console.log(rooms);
-    // console.log('Visitors:');
-    // console.log(visitorMap.values());
-  });
-};
-const leave = (socket, value) => {
-  socket.leave(value, () => {
+// join() called by alertRooms() and on('open') to add a socket to a Room
+const join = (socket, room) => {
+  socket.join(room, () => {
+    // use if extra processing needed
     let rooms = Object.keys(socket.rooms);
     console.log(new Date(), 'Rooms after socket joined:');
     console.log(rooms);
-    console.log('Visitors:');
-    console.log(visitorMap);
+  });
+};
+const leave = (socket, room) => {
+  socket.leave(room, () => {
+    let rooms = Object.keys(socket.rooms);
+    console.log(
+      new Date(),
+      `Rooms after socket ${socket.id} (${socket.room})left:`
+    );
+    console.log(rooms);
+    // console.log('Visitors:');
+    // console.log(visitorMap);
   });
 };
 let connections = [];
 
 function alertVisitor(value, key) {
+  console.log(`Alerting ${value} on socket ${key}`);
   io.to(key).emit('exposureAlert', `${value}, you may have been exposed.`);
 }
+
 io.on('connection', function (socket) {
   connections.push(socket.id);
-  // console.log(socket.id, 'connected');
-  // console.log('roomMap:', roomMap.entries());
-  // console.log('visitorMap:', visitorMap.entries());
-  if (visitorMap.size > 0) {
-    console.log(visitorMap.entries());
-  }
-  // Visitors
-  socket.on('enterRoom', function (data, cb) {
-    cb({
-      socketId: socket.id,
-    });
-    visitorMap.set(socket.id, data.visitor);
-
-    socket.join(data.room);
-    // console.log(new Date(), data.message);
-    // console.log('Visitor Map', visitorMap);
-    // console.log();
-
-    updateAlertMap(data);
-
-    // disambiguate enterRoom event from the event handler in the Room, check-in
-    // handled by Room.handleMessage()
-    io.to(data.room).emit('check-in', {
-      visitor: data.visitor,
-      sentTime: data.sentTime,
-      socketId: socket.id,
-    });
-  });
 
   //Alerts
   socket.on('alertRooms', function (data, cb) {
@@ -96,6 +73,7 @@ io.on('connection', function (socket) {
     // });
 
     join(socket, data.room);
+
     // this will alert everybody currently in the Room.
     // this may not be what we want, but it does show everybody that the system
     // can send alerts. Whether it is a valid alert is a different question.
@@ -110,78 +88,57 @@ io.on('connection', function (socket) {
     // Visitor sends list of room/dates
     console.log(socket.id, JSON.stringify(data.message));
     console.dir('connections', connections);
-    console.log('visitorMap entries', visitorMap.entries());
-    console.log('alertMap entries', alertMap.entries());
-    visitorMap.forEach(alertVisitor);
-
-    // Server maps those entries to the array produced from the VisitorMap
-    // sending an alert to the last socket.id recorded for that name in the visitorMap
-
-    // console.log('Alert Dates:\n', data.message);
-    // roomMap.set(socket.id, data.room);
-    // // now let's find Visitors who have been in the alerted Room at the time of the alerting Visitor
-    // console.log('visitor :>> ', data.visitor);
-    // console.log('Alert Map :>> ', alertMap.get(data.visitor));
+    // console.log('visitorMap entries', visitorMap.entries());
+    // console.log('alertMap entries', alertMap.entries());
+    // match room/date with each visitor room/date entries from their travels
+    // visitorMap.forEach(alertVisitor);
   });
 
-  // Rooms
-  socket.on('open', function (data, cb) {
-    cb({
-      msg: `Keep your people safe today, ${data.room}`,
-      socketId: socket.id,
-    });
-    roomMap.set(socket.id, data.room);
-    join(socket, data.room);
-    console.log(new Date(), 'opening', data.room);
-    console.log('ROOMS:', roomMap);
-  });
+  // Visitors
+  // Visitor sends this message
+  socket.on('enterRoom', (data) => {
+    socket.visitor = data.visitor;
+    socket.payload = data;
+    socket.join(data.room);
 
-  socket.on('close', function (data, cb) {
-    cb({
-      msg: `Well done, ${data.room}`,
-      socketId: socket.id,
-    });
-    leave(socket, data.room);
-    if (roomMap.has(socket.id)) {
-      console.log(
-        `${data.room} ${roomMap.delete(socket.id) ? 'closed' : 'cannot close'}.`
-      );
-    } else {
-      console.log(`Cannot find socket ${socket.id}`);
-    }
-  });
-
-  socket.on('leaveRoom', function (data, cb) {
-    cb({
-      roomId: data.room,
-      visitor: data.visitor,
-      socketId: socket.id,
-    });
-    console.log(new Date(), visitorMap.get(socket.id), 'has left the building');
-
-    // departed handled by Room to list the timestamped departure
-    io.to(data.room).emit('check-out', {
+    // disambiguate enterRoom event from the event handler in the Room, check-in
+    // handled by Room.handleMessage()
+    io.to(data.room).emit('check-in', {
       visitor: data.visitor,
       sentTime: data.sentTime,
       socketId: socket.id,
     });
-    socket.leave(data.room);
   });
 
+  // Rooms
+  socket.on('openRoom', function (data, cb) {
+    cb(`Keep your people safe today, ${data.room}`);
+    socket.room = data.room;
+    console.log(new Date(), 'socket.id opening:>> ', socket.room, socket.id);
+    join(socket, socket.room);
+  });
+
+  socket.on('closeRoom', function (data, cb) {
+    cb(`Well done, ${socket.room}. See you tomorrow?`);
+    console.log('socket.id closing:>> ', socket.room, socket.id);
+    leave(socket, socket.room);
+    io.in(data.room).send(
+      `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
+    );
+  });
+
+  // can't we disconnect in the client?
   socket.on('removeRoom', () => {
-    roomMap.delete(socket.id);
     socket.disconnect();
   });
   socket.on('removeVisitor', () => {
-    visitorMap.delete(socket.id);
-    console.log(new Date(), visitorMap);
     socket.disconnect();
   });
 
   socket.on('disconnect', () => {
     console.log(
       new Date(),
-      `Disconnecting Socket ${socket.id} (${visitorMap.get(socket.id)})`
+      `Disconnecting Socket ${socket.id} (${socket.visitor}/${socket.room})`
     );
   });
 
