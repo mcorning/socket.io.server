@@ -69,7 +69,7 @@ io.on('connection', function (socket) {
 
   // Visitors
   // Visitor sends this message
-  socket.on('enterRoom', (data) => {
+  socket.on('enterRoom', function (data, ack) {
     socket.visitor = data.visitor;
     socket.payload = data;
 
@@ -89,10 +89,12 @@ io.on('connection', function (socket) {
       socketId: socket.id,
     });
     io.in(data.room).send('Visitor entered Room');
+    if (ack) {
+      ack(1);
+    }
   });
-  socket.on('leaveRoom', (data) => {
-    leave(socket, data.room);
 
+  socket.on('leaveRoom', function (data, ack) {
     // disambiguate enterRoom event from the event handler in the Room, check-in
     // handled by Room.handleMessage()
     io.to(data.room).emit('check-out', {
@@ -101,6 +103,10 @@ io.on('connection', function (socket) {
     });
 
     io.in(data.room).send('Visitor left Room');
+    if (ack) {
+      ack(-1);
+    }
+    leave(socket, data.room);
   });
 
   // Rooms
@@ -128,10 +134,10 @@ io.on('connection', function (socket) {
     socket.disconnect();
   });
 
-  socket.on('listAllSockets', (cb) => {
-    console.log('Remaining connections:');
-    console.log(io.sockets.clients().connected);
-    cb(io.sockets.clients().connected);
+  socket.on('listAllSockets', (data, ack) => {
+    console.log('All open connections:');
+    console.log(Object.keys(io.sockets.clients().connected));
+    if (ack) ack(Object.keys(io.sockets.clients().connected));
   });
 
   socket.on('disconnect', () => {
@@ -139,10 +145,6 @@ io.on('connection', function (socket) {
   });
 
   socket.on('disconnectAll', () => {
-    console.log(
-      new Date(),
-      `${data} is disconnecting all ${io.sockets.connected} Sockets...`
-    );
     Object.values(io.sockets.clients().connected).map((v) => v.disconnect());
     console.log('Remaining connections :>> ', io.sockets.connected);
   });
