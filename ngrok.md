@@ -6,7 +6,7 @@
 nodemon .
 ```
 
-note port 3000
+After nodemon starts, note it's using port 3000
 
 ## Start ngrok
 

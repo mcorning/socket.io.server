@@ -31,7 +31,7 @@ app.get('/', function (req, res) {
 // Room's mounted lifecycle method updates the server with its Room ID and the 'open' event
 // NOTE: Rooms may be managed by a person. If so, they may be subject to an exposure alert (or they may trigger one)
 // join() called by alertRooms() and on('open') to add a socket to a Room
-const join = (socket, room) => {
+const joinRoom = (socket, room) => {
   socket.join(room, () => {
     // use if extra processing needed
     let rooms = Object.keys(socket.rooms);
@@ -106,7 +106,7 @@ io.on('connection', function (socket) {
     socket.join(data.visitor);
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
-    join(socket, data.room);
+    joinRoom(socket, data.room);
 
     // disambiguate enterRoom event from the event handler in the Room, checkIn
     // handled by Room.checkIn()
@@ -139,25 +139,32 @@ io.on('connection', function (socket) {
   // Rooms
   socket.on('openRoom', function (data, ack) {
     try {
+      socket.room = data.room;
+      console.log(new Date(), 'socket.id opening:>> ', socket.room, socket.id);
+      joinRoom(socket, socket.room);
       ack({
         message: `You are open for business, ${data.room}. Keep your people safe today.`,
         error: '',
       });
-      socket.room = data.room;
-      console.log(new Date(), 'socket.id opening:>> ', socket.room, socket.id);
-      join(socket, socket.room);
     } catch (error) {
       ack({ message: 'Oops, openRoom() hit this:', error: error.message });
     }
   });
 
-  socket.on('closeRoom', function (data, cb) {
-    cb(`Well done, ${socket.room}. See you tomorrow?`);
-    console.log('socket.id closing:>> ', socket.room, socket.id);
-    leave(socket, socket.room);
-    io.in(data.room).send(
-      `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
-    );
+  socket.on('closeRoom', function (data, ack) {
+    try {
+      console.log('socket.id closing:>> ', socket.room, socket.id);
+      leave(socket, socket.room);
+      io.in(data.room).send(
+        `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
+      );
+      ack({
+        message: `Well done, ${socket.room}. See you tomorrow?`,
+        error: '',
+      });
+    } catch (error) {
+      ack({ message: 'Oops, closeRoom() hit this:', error: error.message });
+    }
   });
 
   // can't we disconnect in the client?
