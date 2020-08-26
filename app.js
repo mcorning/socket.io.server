@@ -5,6 +5,8 @@ var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var port = process.env.PORT || 3000;
 
+const M = require('moment');
+
 app.use(express.static(__dirname));
 
 app.get('/', function (req, res) {
@@ -57,14 +59,39 @@ function alertVisitor(value, key) {
 //===================================================================================//
 
 io.on('connection', function (socket) {
-  //Alerts
-  socket.on('alertRooms', function (data, cb) {
-    cb(`Notifying all rooms you occupied in last 14 days`);
+  socket.on('pingServer', function (data, ack) {
+    ack(`Server is at your disposal, ${data}`);
+  });
 
+  //Alerts
+  // Server handles two incoming alerts:
+  //   exposureWarning
+  //   alertVisitor
+
+  // For each Room occupied, Visitor sends exposureWarning with the visit dates
+  // (see Visitor.vue:warnRooms())
+  // message: {roomId, [dates]}
+  // Server forwards message to Room
+  // Room handles notifyRoom event
+  socket.on('exposureWarning', function (message, ack) {
+    // Visitor message includes the Room name to alert
+    io.to(message.room).emit('notifyRoom', message.message);
+    let dates = message.message.map((v) => M(v.sentTime).format('MMM DD'));
+    console.log('dates :>> ', dates);
+    ack(`Server notified ${message.room} of possible exposure on ${dates}`);
+  });
+
+  // sent from Room for each visitor (who warned each Room Visitor occupied)
+  socket.on('alertVisitor', function (message, ack) {
     // Visitor message includes the Room names to alert
-    data.message.map((v) => {
-      io.in(v[0]).emit('exposureAlert', v[1]);
-    });
+    try {
+      message.visitor.map((v) => {
+        socket.to(message.visitor).emit('exposureAlert', message.message);
+      });
+      ack(`Alerted Visitor`);
+    } catch (error) {
+      console.error(error);
+    }
   });
 
   // Visitors
@@ -81,9 +108,9 @@ io.on('connection', function (socket) {
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     join(socket, data.room);
 
-    // disambiguate enterRoom event from the event handler in the Room, check-in
-    // handled by Room.handleMessage()
-    io.to(data.room).emit('check-in', {
+    // disambiguate enterRoom event from the event handler in the Room, checkIn
+    // handled by Room.checkIn()
+    io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
       sentTime: data.sentTime,
       socketId: socket.id,
@@ -95,9 +122,9 @@ io.on('connection', function (socket) {
   });
 
   socket.on('leaveRoom', function (data, ack) {
-    // disambiguate enterRoom event from the event handler in the Room, check-in
-    // handled by Room.handleMessage()
-    io.to(data.room).emit('check-out', {
+    // disambiguate enterRoom event from the event handler in the Room, checkOut
+    // handled by Room.checkOut()
+    io.to(data.room).emit('checkOut', {
       visitor: data.visitor,
       sentTime: data.sentTime,
     });
@@ -110,11 +137,18 @@ io.on('connection', function (socket) {
   });
 
   // Rooms
-  socket.on('openRoom', function (data, cb) {
-    cb(`Keep your people safe today, ${data.room}`);
-    socket.room = data.room;
-    console.log(new Date(), 'socket.id opening:>> ', socket.room, socket.id);
-    join(socket, socket.room);
+  socket.on('openRoom', function (data, ack) {
+    try {
+      ack({
+        message: `You are open for business, ${data.room}. Keep your people safe today.`,
+        error: '',
+      });
+      socket.room = data.room;
+      console.log(new Date(), 'socket.id opening:>> ', socket.room, socket.id);
+      join(socket, socket.room);
+    } catch (error) {
+      ack({ message: 'Oops, openRoom() hit this:', error: error.message });
+    }
   });
 
   socket.on('closeRoom', function (data, cb) {
