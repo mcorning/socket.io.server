@@ -42,9 +42,9 @@ const joinRoom = (socket, room) => {
 const leave = (socket, room) => {
   socket.leave(room, () => {
     let rooms = Object.keys(socket.rooms);
-    console.log(
+    console.info(
       new Date(),
-      `Rooms after socket ${socket.id} (${socket.room})left:`
+      `Rooms after socket ${socket.id} left:`
     );
     console.log(rooms);
   });
