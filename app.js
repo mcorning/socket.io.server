@@ -33,21 +33,52 @@ app.get('/', function (req, res) {
 // join() called by alertRooms() and on('open') to add a socket to a Room
 const joinRoom = (socket, room) => {
   socket.join(room, () => {
-    // use if extra processing needed
     let rooms = Object.keys(socket.rooms);
-    console.log(new Date(), 'Rooms after socket joined:');
-    console.log(rooms);
+    console.log(new Date());
+    console.log(
+      `Rooms occupied by ${socket.visitor} after they joined ${room} (includes Visitor's own room):`
+    );
+
+    console.table(rooms);
+    console.log(
+      '-------------------------------------------------------------------------'
+    );
+    updateOccupancy(room);
   });
 };
 const leave = (socket, room) => {
   socket.leave(room, () => {
     let rooms = Object.keys(socket.rooms);
+    console.log(new Date());
     console.log(
-      new Date(),
-      `Rooms after socket ${socket.id} (${socket.room})left:`
+      `Rooms occupied by ${socket.visitor} after they left ${room} (includes Visitor's own room):`
     );
-    console.log(rooms);
+
+    console.table(rooms);
+    console.log(
+      '-------------------------------------------------------------------------'
+    );
+    updateOccupancy(room);
   });
+};
+
+let namespace = '/';
+
+const updateOccupancy = (room) => {
+  // this does not appear to be sent to all in the room
+  const occupiedRoom = io.nsps[namespace].adapter.rooms[room];
+  const occupancy = occupiedRoom ? Object.keys(occupiedRoom).length : 0;
+  console.log(`Now ${room} has ${occupancy} occupants`);
+  io.in(room).send(`Server: Occupancy ${occupancy}`);
+
+  getAllRooms();
+};
+
+const getAllRooms = () => {
+  // console.log('To include all rooms on the Server:');
+  console.log();
+  console.log(`Listing all rooms in namespace ${namespace} `);
+  console.table(io.nsps[namespace].adapter.rooms);
 };
 
 function alertVisitor(value, key) {
@@ -59,6 +90,18 @@ function alertVisitor(value, key) {
 //===================================================================================//
 
 io.on('connection', function (socket) {
+  console.log(
+    `//================================= on connection() ==================================================//`
+  );
+  console.log(
+    `When ${socket.id} connected, these rooms were in namespace ${namespace}: `
+  );
+  console.table(io.nsps[namespace].adapter.rooms);
+  console.log(
+    `//================================= end on connection() ==================================================//
+    `
+  );
+
   socket.on('pingServer', function (data, ack) {
     ack(`Server is at your disposal, ${data}`);
   });
@@ -96,7 +139,7 @@ io.on('connection', function (socket) {
 
   // Visitors
   // Visitor sends this message
-  socket.on('enterRoom', function (data, ack) {
+  socket.on('enterRoom', function (data) {
     socket.visitor = data.visitor;
     socket.payload = data;
 
@@ -115,10 +158,6 @@ io.on('connection', function (socket) {
       sentTime: data.sentTime,
       socketId: socket.id,
     });
-    io.in(data.room).send('Visitor entered Room');
-    if (ack) {
-      ack(1);
-    }
   });
 
   socket.on('leaveRoom', function (data, ack) {
@@ -129,10 +168,6 @@ io.on('connection', function (socket) {
       sentTime: data.sentTime,
     });
 
-    io.in(data.room).send('Visitor left Room');
-    if (ack) {
-      ack(-1);
-    }
     leave(socket, data.room);
   });
 
