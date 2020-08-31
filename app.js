@@ -69,7 +69,7 @@ const updateOccupancy = (room) => {
   const occupiedRoom = io.nsps[namespace].adapter.rooms[room];
   const occupancy = occupiedRoom ? Object.keys(occupiedRoom).length : 0;
   console.log(`Now ${room} has ${occupancy} occupants`);
-  io.in(room).send(`Server: Occupancy ${occupancy}`);
+  // io.in(room).send(`Server: Occupancy ${occupancy}`);
 
   getAllRooms();
 };
@@ -128,9 +128,8 @@ io.on('connection', function (socket) {
   socket.on('alertVisitor', function (message, ack) {
     // Visitor message includes the Room names to alert
     try {
-      message.visitor.map((v) => {
-        socket.to(message.visitor).emit('exposureAlert', message.message);
-      });
+      console.info(message.visitor, 'alerted')
+      socket.to(message.visitor).emit('exposureAlert', message.message);
       ack(`Alerted Visitor`);
     } catch (error) {
       console.error(error);
