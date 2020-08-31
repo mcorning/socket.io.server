@@ -156,6 +156,8 @@ io.on('connection', function (socket) {
     io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
       sentTime: data.sentTime,
+      room: data.room,
+      message: data.message,
       socketId: socket.id,
     });
   });
@@ -166,6 +168,8 @@ io.on('connection', function (socket) {
     io.to(data.room).emit('checkOut', {
       visitor: data.visitor,
       sentTime: data.sentTime,
+      room: data.room,
+      message: data.message,
     });
 
     leave(socket, data.room);
