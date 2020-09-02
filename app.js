@@ -1,10 +1,11 @@
 // express code
-var express = require('express');
-var app = express();
+require('colors');
+const express = require('express');
+const app = express();
 
-var http = require('http').Server(app);
-var io = require('socket.io')(http);
-var port = process.env.PORT || 3003;
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
+const port = process.env.PORT || 3003;
 
 const M = require('moment');
 
@@ -41,7 +42,8 @@ const leaveRoom = (socket, room) => {
     let rooms = Object.keys(socket.rooms);
     console.log(getNow());
     console.log(
-      `Rooms occupied by ${socket.visitor} after they left ${room} (includes Visitor's own room):`
+      `Rooms occupied by ${socket.visitor} after they left ${room}
+      (includes Visitor's own room):`
     );
 
     console.table(rooms);
@@ -65,10 +67,10 @@ const updateOccupancy = (room) => {
   console.log(`${getNow()}: Now ${room} has ${occupancy} occupants`);
   // io.in(room).send(`Server: Occupancy ${occupancy}`);
 
-  getAllRooms();
+  listAllRooms();
 };
 
-const getAllRooms = () => {
+const listAllRooms = () => {
   // console.log('To include all rooms on the Server:');
   console.log();
   console.log(`Listing all rooms in namespace ${namespace} `);
@@ -83,7 +85,8 @@ io.on('connection', function (socket) {
     `//======================== on connection() ========================//`
   );
   console.log(
-    `When ${socket.id} connected, these rooms were in namespace ${namespace}: `
+    `When ${socket.id} connected, these rooms were in namespace ${namespace} 
+(including a room named with visitor's ID,  ${socket.id}): `
   );
   console.table(io.nsps[namespace].adapter.rooms);
   console.log(
@@ -107,9 +110,9 @@ io.on('connection', function (socket) {
   // Room handles notifyRoom event
   socket.on('exposureWarning', function (message, ack) {
     // Visitor message includes the Room name to alert
-    let date = M(message.sentTime).format('MMM DD');
+    let date = M(message.sentTime).format('llll');
     io.to(message.room).emit('notifyRoom', date);
-    let msg = `Server notified ${message.room} of possible exposure on ${date}`;
+    let msg = `Server: ${message.room} warned of possible exposure from ${date}`;
     ack(msg);
     console.info(`${getNow()} ${msg}`);
   });
@@ -120,7 +123,7 @@ io.on('connection', function (socket) {
     try {
       console.info(message.visitor, 'alerted');
       socket.to(message.visitor).emit('exposureAlert', message.message);
-      ack(`Alerted Visitor`);
+      ack(`Server: Alerted ${messag.visitor}`);
     } catch (error) {
       console.error(error);
     }
@@ -128,19 +131,14 @@ io.on('connection', function (socket) {
 
   // Visitors
   // Visitor sends this message
+  // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', function (data) {
     socket.visitor = data.visitor;
     socket.payload = data;
 
-    // add this socketId from the Visitor to all others used.
-    // this way you can map all connnected sockets to individual Visitors
-    // To alert this visitor, send the Alerts to this room (lower case to distinguish from real Rooms).
-    socket.join(data.visitor);
-
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     joinRoom(socket, data.room);
 
-    // disambiguate enterRoom event from the event handler in the Room, checkIn
     // handled by Room.checkIn()
     io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
@@ -151,8 +149,8 @@ io.on('connection', function (socket) {
     });
   });
 
+  // disambiguate leaveRoom event from the event handler in the Room, checkOut
   socket.on('leaveRoom', function (data, ack) {
-    // disambiguate enterRoom event from the event handler in the Room, checkOut
     // handled by Room.checkOut()
     io.to(data.room).emit('checkOut', {
       visitor: data.visitor,
@@ -170,11 +168,17 @@ io.on('connection', function (socket) {
       socket.room = data.room;
       console.log(getNow(), 'socket.id opening:>> ', socket.room, socket.id);
       joinRoom(socket, socket.room);
+
+      let availableRooms = Array.from(
+        Object.keys(io.nsps[namespace].adapter.rooms)
+      ).filter((room) => room.includes('.'));
+      console.table(availableRooms);
+
+      io.of(namespace).emit('availableRooms', availableRooms);
       ack({
-        message: `You are open for business, ${data.room}. Keep your people safe today.`,
+        message: `${data.room}, you are open for business. Keep your people safe today.`,
         error: '',
       });
-      io.of(namespace).emit('roomIsAvailable', data.room);
     } catch (error) {
       ack({ message: 'Oops, openRoom() hit this:', error: error.message });
     }
@@ -196,14 +200,6 @@ io.on('connection', function (socket) {
     }
   });
 
-  // can't we disconnect in the client?
-  socket.on('removeRoom', () => {
-    socket.disconnect();
-  });
-  socket.on('removeVisitor', () => {
-    socket.disconnect();
-  });
-
   socket.on('listAllSockets', (data, ack) => {
     console.log('All open connections:');
     console.log(Object.keys(io.sockets.clients().connected));
@@ -218,33 +214,11 @@ io.on('connection', function (socket) {
     Object.values(io.sockets.clients().connected).map((v) => v.disconnect());
     console.log('Remaining connections :>> ', io.sockets.connected);
   });
-
-  // socket.emit('newMessage', 'I am here');
-
-  // socket.on('newMessage', function (msg) {
-  //   console.info('new message', msg);
-  //   if (msg.message == 'alert') {
-  //     console.error(msg.visitor + 'is quarantived on', msg.sentTime);
-  //   }
-  //   io.emit('newMessage', msg);
-  // });
-
-  // // called when Visitor changes Room dropdown
-  // socket.on('joinRoom', (data) => {
-  //   console.log(data);
-  //   socket.join(data);
-  //   io.to(data).emit('newMessage', 'Welcome our new visitor');
-  // });
-
-  // // Called inside room.created(),
-  // socket.on('addRoom', (data) => {
-  //   console.log(data);
-  //   rooms.push(data);
-  //   socket.emit('addedRoom', { numRooms: rooms.size, roomId: data });
-  // });
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.0118.12');
-  console.log('listening on http://localhost:' + port);
+  console.log('Build: 09.02.10.58'.magenta);
+  console.log(M().format('llll').magenta);
+  console.log(`listening on http://localhost: ${port}`.magenta);
+  console.log();
 });
