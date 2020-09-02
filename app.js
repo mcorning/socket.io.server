@@ -245,5 +245,6 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('listening on *:' + port);
+  console.log('Build: 09.0118.12');
+  console.log('listening on http://localhost:' + port);
 });
