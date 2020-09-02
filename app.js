@@ -1,3 +1,4 @@
+// express code
 var express = require('express');
 var app = express();
 
@@ -12,51 +13,40 @@ app.use(express.static(__dirname));
 app.get('/', function (req, res) {
   res.sendFile(__dirname + '/index.html');
 });
+// end express code
 
-// let roomMap = new Map();
-// let visitorMap = new Map();
-// let alertMap = new Map('', []);
-
-// let updateAlertMap = function (data) {
-//   if (!alertMap.has(data.visitor)) {
-//     alertMap.set(data.visitor, []);
-//   }
-//   alertMap.get(data.visitor).push({ room: data.room, date: data.sentTime });
-//   // console.log('Alert Map', alertMap);
-// };
-
-// This server handles messages from Rooms and Visitors
-// Rooms
-// Room comes onine and gets connected to server
-// Room's mounted lifecycle method updates the server with its Room ID and the 'open' event
-// NOTE: Rooms may be managed by a person. If so, they may be subject to an exposure alert (or they may trigger one)
-// join() called by alertRooms() and on('open') to add a socket to a Room
+// Server helper methods
+// called by event handlers: enterRoom and openRoom
+// current socket joins room specified by client
 const joinRoom = (socket, room) => {
   socket.join(room, () => {
     let rooms = Object.keys(socket.rooms);
-    console.log(new Date());
+    console.log(getNow());
     console.log(
       `Rooms occupied by ${socket.visitor} after they joined ${room} (includes Visitor's own room):`
     );
 
     console.table(rooms);
     console.log(
-      '-------------------------------------------------------------------------'
+      '-------------------------------------------------------------------'
     );
     updateOccupancy(room);
   });
 };
-const leave = (socket, room) => {
+
+// called by event handlers: leaveRoom (Visitor) and closeRoom (Room)
+// current socket leaves room specified by client
+const leaveRoom = (socket, room) => {
   socket.leave(room, () => {
     let rooms = Object.keys(socket.rooms);
-    console.log(new Date());
+    console.log(getNow());
     console.log(
       `Rooms occupied by ${socket.visitor} after they left ${room} (includes Visitor's own room):`
     );
 
     console.table(rooms);
     console.log(
-      '-------------------------------------------------------------------------'
+      '-------------------------------------------------------------------'
     );
     updateOccupancy(room);
   });
@@ -64,11 +54,15 @@ const leave = (socket, room) => {
 
 let namespace = '/';
 
+const getNow = () => {
+  return M().format('HH:MM MMM DD');
+};
+
 const updateOccupancy = (room) => {
   // this does not appear to be sent to all in the room
   const occupiedRoom = io.nsps[namespace].adapter.rooms[room];
   const occupancy = occupiedRoom ? Object.keys(occupiedRoom).length : 0;
-  console.log(`Now ${room} has ${occupancy} occupants`);
+  console.log(`${getNow()}: Now ${room} has ${occupancy} occupants`);
   // io.in(room).send(`Server: Occupancy ${occupancy}`);
 
   getAllRooms();
@@ -81,24 +75,19 @@ const getAllRooms = () => {
   console.table(io.nsps[namespace].adapter.rooms);
 };
 
-function alertVisitor(value, key) {
-  console.log(`Alerting ${value} on socket ${key}`);
-  io.to(key).emit('exposureAlert', `${value}, you may have been exposed.`);
-}
-
 // Heavy lifting below
-//===================================================================================//
-
+//=============================================================================//
+// called when a connection changes
 io.on('connection', function (socket) {
   console.log(
-    `//================================= on connection() ==================================================//`
+    `//======================== on connection() ========================//`
   );
   console.log(
     `When ${socket.id} connected, these rooms were in namespace ${namespace}: `
   );
   console.table(io.nsps[namespace].adapter.rooms);
   console.log(
-    `//================================= end on connection() ==================================================//
+    `//====================== end on connection() ======================//
     `
   );
 
@@ -111,24 +100,25 @@ io.on('connection', function (socket) {
   //   exposureWarning
   //   alertVisitor
 
-  // For each Room occupied, Visitor sends exposureWarning with the visit dates
+  // For each Room occupied, Visitor sends exposureWarning with the visit date
   // (see Visitor.vue:warnRooms())
-  // message: {roomId, [dates]}
+  // message: {roomId, date}
   // Server forwards message to Room
   // Room handles notifyRoom event
   socket.on('exposureWarning', function (message, ack) {
     // Visitor message includes the Room name to alert
-    io.to(message.room).emit('notifyRoom', message.message);
-    let dates = message.message.map((v) => M(v.sentTime).format('MMM DD'));
-    console.log('dates :>> ', dates);
-    ack(`Server notified ${message.room} of possible exposure on ${dates}`);
+    let date = M(message.sentTime).format('MMM DD');
+    io.to(message.room).emit('notifyRoom', date);
+    let msg = `Server notified ${message.room} of possible exposure on ${date}`;
+    ack(msg);
+    console.info(`${getNow()} ${msg}`);
   });
 
   // sent from Room for each visitor (who warned each Room Visitor occupied)
   socket.on('alertVisitor', function (message, ack) {
     // Visitor message includes the Room names to alert
     try {
-      console.info(message.visitor, 'alerted')
+      console.info(message.visitor, 'alerted');
       socket.to(message.visitor).emit('exposureAlert', message.message);
       ack(`Alerted Visitor`);
     } catch (error) {
@@ -171,19 +161,20 @@ io.on('connection', function (socket) {
       message: data.message,
     });
 
-    leave(socket, data.room);
+    leaveRoom(socket, data.room);
   });
 
   // Rooms
   socket.on('openRoom', function (data, ack) {
     try {
       socket.room = data.room;
-      console.log(new Date(), 'socket.id opening:>> ', socket.room, socket.id);
+      console.log(getNow(), 'socket.id opening:>> ', socket.room, socket.id);
       joinRoom(socket, socket.room);
       ack({
         message: `You are open for business, ${data.room}. Keep your people safe today.`,
         error: '',
       });
+      io.of(namespace).emit('roomIsAvailable', data.room);
     } catch (error) {
       ack({ message: 'Oops, openRoom() hit this:', error: error.message });
     }
@@ -192,7 +183,7 @@ io.on('connection', function (socket) {
   socket.on('closeRoom', function (data, ack) {
     try {
       console.log('socket.id closing:>> ', socket.room, socket.id);
-      leave(socket, socket.room);
+      leaveRoom(socket, socket.room);
       io.in(data.room).send(
         `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
       );
@@ -220,7 +211,7 @@ io.on('connection', function (socket) {
   });
 
   socket.on('disconnect', () => {
-    console.log(new Date(), `Disconnecting Socket ${socket.id} `);
+    console.log(getNow(), `Disconnecting Socket ${socket.id} `);
   });
 
   socket.on('disconnectAll', () => {
