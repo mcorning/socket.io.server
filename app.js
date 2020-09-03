@@ -198,7 +198,7 @@ io.on('connection', function (socket) {
       );
       ack({
         message:
-          data.msg == 'Closed'
+          data.message == 'Closed'
             ? `Well done, ${socket.room}. See you tomorrow?`
             : `Closed room ${socket.room}. You can add it back later.`,
         error: '',
