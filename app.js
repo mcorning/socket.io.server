@@ -226,7 +226,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.02.14.58'.magenta);
+  console.log('Build: 09.02.20.25'.magenta);
   console.log(M().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
