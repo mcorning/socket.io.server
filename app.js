@@ -25,6 +25,7 @@ const joinRoom = (socket, room) => {
     console.log(getNow());
     console.log(
       `Rooms occupied by ${socket.visitor} after they joined ${room} (includes Visitor's own room):`
+        .blue
     );
 
     console.table(rooms);
@@ -43,7 +44,7 @@ const leaveRoom = (socket, room) => {
     console.log(getNow());
     console.log(
       `Rooms occupied by ${socket.visitor} after they left ${room}
-      (includes Visitor's own room):`
+(includes Visitor's own room):`.yellow
     );
 
     console.table(rooms);
@@ -58,6 +59,15 @@ let namespace = '/';
 
 const getNow = () => {
   return M().format('HH:MM MMM DD');
+};
+
+const updateAvailableRooms = () => {
+  let availableRooms = Array.from(
+    Object.keys(io.nsps[namespace].adapter.rooms)
+  ).filter((room) => room.includes('.'));
+  console.table(availableRooms);
+
+  io.of(namespace).emit('availableRooms', availableRooms);
 };
 
 const updateOccupancy = (room) => {
@@ -82,7 +92,7 @@ const listAllRooms = () => {
 // called when a connection changes
 io.on('connection', function (socket) {
   console.log(
-    `//======================== on connection() ========================//`
+    `//====================== on connection() ======================//`
   );
   console.log(
     `When ${socket.id} connected, these rooms were in namespace ${namespace} 
@@ -90,7 +100,7 @@ io.on('connection', function (socket) {
   );
   console.table(io.nsps[namespace].adapter.rooms);
   console.log(
-    `//====================== end on connection() ======================//
+    `//==================== end on connection() ====================//
     `
   );
 
@@ -168,19 +178,14 @@ io.on('connection', function (socket) {
       socket.room = data.room;
       console.log(getNow(), 'socket.id opening:>> ', socket.room, socket.id);
       joinRoom(socket, socket.room);
-
-      let availableRooms = Array.from(
-        Object.keys(io.nsps[namespace].adapter.rooms)
-      ).filter((room) => room.includes('.'));
-      console.table(availableRooms);
-
-      io.of(namespace).emit('availableRooms', availableRooms);
       ack({
         message: `${data.room}, you are open for business. Keep your people safe today.`,
         error: '',
       });
+
+      updateAvailableRooms();
     } catch (error) {
-      ack({ message: 'Oops, openRoom() hit this:', error: error.message });
+      console.error('Oops, openRoom() hit this:', error.message);
     }
   });
 
@@ -192,11 +197,15 @@ io.on('connection', function (socket) {
         `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
       );
       ack({
-        message: `Well done, ${socket.room}. See you tomorrow?`,
+        message:
+          data.msg == 'Closed'
+            ? `Well done, ${socket.room}. See you tomorrow?`
+            : `Closed room ${socket.room}. You can add it back later.`,
         error: '',
       });
+      updateAvailableRooms();
     } catch (error) {
-      ack({ message: 'Oops, closeRoom() hit this:', error: error.message });
+      console.error('Oops, closeRoom() hit this:', error.message);
     }
   });
 
@@ -217,7 +226,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.02.10.58'.magenta);
+  console.log('Build: 09.02.14.58'.magenta);
   console.log(M().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
