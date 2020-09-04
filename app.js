@@ -133,7 +133,7 @@ io.on('connection', function (socket) {
     try {
       console.info(message.visitor, 'alerted');
       socket.to(message.visitor).emit('exposureAlert', message.message);
-      ack(`Server: Alerted ${messag.visitor}`);
+      ack(`Server: Alerted ${message.visitor}`);
     } catch (error) {
       console.error(error);
     }
