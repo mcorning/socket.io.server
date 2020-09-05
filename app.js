@@ -110,6 +110,7 @@ io.on('connection', function (socket) {
     console.log(`Opening ${visitor}'s Room`);
     socket.join(visitor);
     ack(`Server says "Your room is ready, ${visitor}"`);
+    listAllRooms();
   });
 
   socket.on('pingServer', function (data, ack) {
