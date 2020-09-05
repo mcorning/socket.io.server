@@ -106,10 +106,10 @@ io.on('connection', function (socket) {
     `
   );
 
-  socket.on('openMyRoom', function (data, ack) {
-    console.log(`Opening ${data.message}'s Room`);
-    socket.join(data.message);
-    ack(`Server says "Your room is ready, ${data.message}"`);
+  socket.on('openMyRoom', function (visitor, ack) {
+    console.log(`Opening ${visitor}'s Room`);
+    socket.join(visitor);
+    ack(`Server says "Your room is ready, ${visitor}"`);
   });
 
   socket.on('pingServer', function (data, ack) {
