@@ -148,7 +148,7 @@ io.on('connection', function (socket) {
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     joinRoom(socket, data.room);
-
+    socket.join(data.visitor);
     // handled by Room.checkIn()
     io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
