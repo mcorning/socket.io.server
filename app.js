@@ -107,6 +107,7 @@ io.on('connection', function (socket) {
   );
 
   socket.on('openMyRoom', function (data, ack) {
+    console.log(`Opening ${data.message}'s Room`);
     socket.join(data.message);
     ack(`Server says "Your room is ready, ${data.message}"`);
   });
