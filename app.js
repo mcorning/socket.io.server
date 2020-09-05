@@ -84,8 +84,10 @@ const listAllRooms = () => {
   // console.log('To include all rooms on the Server:');
   console.log();
   console.log(`Listing all rooms in namespace ${namespace} `);
-  console.table(io.nsps[namespace].adapter.rooms);
+  console.table(rooms);
 };
+
+const rooms = io.nsps[namespace].adapter.rooms;
 
 // Heavy lifting below
 //=============================================================================//
@@ -103,6 +105,11 @@ io.on('connection', function (socket) {
     `//==================== end on connection() ====================//
     `
   );
+
+  socket.on('openMyRoom', function (data, ack) {
+    socket.join(data.message);
+    ack(`Server says "Your room is ready, ${data.message}"`);
+  });
 
   socket.on('pingServer', function (data, ack) {
     ack(`Server is at your disposal, ${data}`);
@@ -148,7 +155,9 @@ io.on('connection', function (socket) {
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     joinRoom(socket, data.room);
-    socket.join(data.visitor);
+    if (!rooms.includes(data.visitor)) {
+      socket.join(data.visitor);
+    }
     // handled by Room.checkIn()
     io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
