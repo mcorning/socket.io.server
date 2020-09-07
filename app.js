@@ -16,18 +16,26 @@ app.get('/', function (req, res) {
 });
 // end express code
 
+// globals
+let namespace = '/';
+const rooms = io.nsps[namespace].adapter.rooms;
+
 // Server helper methods
+const getNow = () => {
+  return M().format('HH:MM MMM DD');
+};
+
 // called by event handlers: enterRoom and openRoom
 // current socket joins room specified by client
 const joinRoom = (socket, room) => {
   socket.join(room, () => {
-    let rooms = Object.keys(socket.rooms);
+    // let rooms = Object.keys(socket.rooms);
     console.log(getNow());
     console.log(
       `Rooms occupied by ${socket.visitor} after they joined ${room} (includes Visitor's own room):`
         .blue
     );
-
+    // rooms is a global variable
     console.table(rooms);
     console.log(
       '-------------------------------------------------------------------'
@@ -40,13 +48,14 @@ const joinRoom = (socket, room) => {
 // current socket leaves room specified by client
 const leaveRoom = (socket, room) => {
   socket.leave(room, () => {
-    let rooms = Object.keys(socket.rooms);
+    // let rooms = Object.keys(socket.rooms);
     console.log(getNow());
     console.log(
       `Rooms occupied by ${socket.visitor} after they left ${room}
 (includes Visitor's own room):`.yellow
     );
 
+    // rooms is a global variable
     console.table(rooms);
     console.log(
       '-------------------------------------------------------------------'
@@ -55,16 +64,21 @@ const leaveRoom = (socket, room) => {
   });
 };
 
-let namespace = '/';
+const listAllRooms = () => {
+  // console.log('To include all rooms on the Server:');
+  console.log();
+  console.log(`Listing all rooms in namespace ${namespace} `);
+  // rooms is a global variable
+  console.table(rooms);
+};
 
-const getNow = () => {
-  return M().format('HH:MM MMM DD');
+const newVisitor = (visitor) => {
+  !Object.keys(rooms).includes(visitor);
 };
 
 const updateAvailableRooms = () => {
-  let availableRooms = Array.from(
-    Object.keys(io.nsps[namespace].adapter.rooms)
-  ).filter((room) => room.includes('.'));
+  // rooms is a global variable
+  let availableRooms = Array.from(rooms).filter((room) => room.includes('.'));
   console.table(availableRooms);
 
   io.of(namespace).emit('availableRooms', availableRooms);
@@ -72,22 +86,14 @@ const updateAvailableRooms = () => {
 
 const updateOccupancy = (room) => {
   // this does not appear to be sent to all in the room
-  const occupiedRoom = io.nsps[namespace].adapter.rooms[room];
+  // rooms is a global variable
+  const occupiedRoom = rooms[room];
   const occupancy = occupiedRoom ? Object.keys(occupiedRoom).length : 0;
   console.log(`${getNow()}: Now ${room} has ${occupancy} occupants`);
   // io.in(room).send(`Server: Occupancy ${occupancy}`);
 
   listAllRooms();
 };
-
-const listAllRooms = () => {
-  // console.log('To include all rooms on the Server:');
-  console.log();
-  console.log(`Listing all rooms in namespace ${namespace} `);
-  console.table(rooms);
-};
-
-const rooms = io.nsps[namespace].adapter.rooms;
 
 // Heavy lifting below
 //=============================================================================//
@@ -100,7 +106,8 @@ io.on('connection', function (socket) {
     `When ${socket.id} connected, these rooms were in namespace ${namespace} 
 (including a room named with visitor's ID,  ${socket.id}): `
   );
-  console.table(io.nsps[namespace].adapter.rooms);
+  // rooms is a global variable
+  console.table(rooms);
   console.log(
     `//==================== end on connection() ====================//
     `
@@ -109,7 +116,7 @@ io.on('connection', function (socket) {
   socket.on('openMyRoom', function (visitor, ack) {
     console.log(`Opening ${visitor}'s Room`);
     socket.join(visitor);
-    ack(`Server says "Your room is ready, ${visitor}"`);
+    ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
     listAllRooms();
   });
 
@@ -157,7 +164,7 @@ io.on('connection', function (socket) {
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     joinRoom(socket, data.room);
-    if (!rooms.includes(data.visitor)) {
+    if (newVisitor(data.visitor)) {
       socket.join(data.visitor);
     }
     // handled by Room.checkIn()
