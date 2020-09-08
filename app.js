@@ -18,110 +18,57 @@ app.get('/', function (req, res) {
 
 // globals
 let namespace = '/';
-const rooms = io.nsps[namespace].adapter.rooms;
+const unavailableRooms = new Map();
 
 // Server helper methods
 const getNow = () => {
-  return M().format('HH:MM MMM DD');
+  return M().format('lll');
 };
 
-// called by event handlers: enterRoom and openRoom
-// current socket joins room specified by client
-const joinRoom = (socket, room) => {
-  socket.join(room, () => {
-    // let rooms = Object.keys(socket.rooms);
-    console.log(getNow());
-    console.log(
-      `Rooms occupied by ${socket.visitor} after they joined ${room} (includes Visitor's own room):`
-        .blue
-    );
-    // rooms is a global variable
-    console.table(rooms);
-    console.log(
-      '-------------------------------------------------------------------'
-    );
-    updateOccupancy(room);
-  });
+const getRooms = (available = false, accupied = false) => {
+  const allRooms = io.nsps[namespace].adapter.rooms;
+  let rooms = Object.keys(allRooms);
+  if (available) {
+    return rooms.filter((v) => v.includes('.'));
+  }
+  if (accupied) {
+    return Object.entries(allRooms).filter((v) => v[1].length > 1);
+  }
+
+  return rooms;
 };
 
-// called by event handlers: leaveRoom (Visitor) and closeRoom (Room)
-// current socket leaves room specified by client
-const leaveRoom = (socket, room) => {
-  socket.leave(room, () => {
-    // let rooms = Object.keys(socket.rooms);
-    console.log(getNow());
-    console.log(
-      `Rooms occupied by ${socket.visitor} after they left ${room}
-(includes Visitor's own room):`.yellow
-    );
-
-    // rooms is a global variable
-    console.table(rooms);
-    console.log(
-      '-------------------------------------------------------------------'
-    );
-    updateOccupancy(room);
-  });
-};
-
-const listAllRooms = () => {
-  // console.log('To include all rooms on the Server:');
+const listOccupiedRooms = () => {
+  // publicRooms is the entries array of rooms
+  publicRooms = getRooms(null, true);
+  console.log(getNow(), 'All accupied Rooms (array)');
+  console.table(publicRooms);
+  let sockets = publicRooms.map((r) => r[1].sockets).map((v) => Object.keys(v));
+  console.log('Occupying Sockets:');
+  console.table(sockets);
   console.log();
-  console.log(`Listing all rooms in namespace ${namespace} `);
-  // rooms is a global variable
-  console.table(rooms);
-};
-
-const newVisitor = (visitor) => {
-  !Object.keys(rooms).includes(visitor);
 };
 
 const updateAvailableRooms = () => {
-  // rooms is a global variable
-  let availableRooms = Array.from(rooms).filter((room) => room.includes('.'));
+  let availableRooms = getRooms(true);
+  console.info(getNow(), 'emitting availableRooms event with:');
   console.table(availableRooms);
-
   io.of(namespace).emit('availableRooms', availableRooms);
-};
-
-const updateOccupancy = (room) => {
-  // this does not appear to be sent to all in the room
-  // rooms is a global variable
-  const occupiedRoom = rooms[room];
-  const occupancy = occupiedRoom ? Object.keys(occupiedRoom).length : 0;
-  console.log(`${getNow()}: Now ${room} has ${occupancy} occupants`);
-  // io.in(room).send(`Server: Occupancy ${occupancy}`);
-
-  listAllRooms();
+  console.log();
 };
 
 // Heavy lifting below
 //=============================================================================//
 // called when a connection changes
 io.on('connection', function (socket) {
-  console.log(
-    `//====================== on connection() ======================//`
-  );
-  console.log(
-    `When ${socket.id} connected, these rooms were in namespace ${namespace} 
-(including a room named with visitor's ID,  ${socket.id}): `
-  );
-  // rooms is a global variable
-  console.table(rooms);
-  console.log(
-    `//==================== end on connection() ====================//
-    `
-  );
+  console.log(socket.id, 'connected');
 
   socket.on('openMyRoom', function (visitor, ack) {
     console.log(`Opening ${visitor}'s Room`);
     socket.join(visitor);
+    console.log(io.nsps[namespace].adapter.rooms[visitor]);
+    console.log();
     ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
-    listAllRooms();
-  });
-
-  socket.on('pingServer', function (data, ack) {
-    ack(`Server is at your disposal, ${data}`);
   });
 
   //Alerts
@@ -137,10 +84,20 @@ io.on('connection', function (socket) {
   socket.on('exposureWarning', function (message, ack) {
     // Visitor message includes the Room name to alert
     let date = M(message.sentTime).format('llll');
-    io.to(message.room).emit('notifyRoom', date);
-    let msg = `Server: ${message.room} warned of possible exposure from ${date}`;
-    ack(msg);
-    console.info(`${getNow()} ${msg}`);
+    let availableRooms = getRooms(true);
+    if (availableRooms.includes(message.room)) {
+      console.table(availableRooms);
+      io.to(message.room).emit('notifyRoom', date);
+      let msg = `Server: ${message.room} warned of possible exposure from ${date}`;
+      ack(msg);
+      console.info(`${getNow()} ${msg}`);
+    } else {
+      console.table(getRooms());
+
+      console.warn(`${message.room} is not available to be warned`);
+      unavailableRooms.set(message.room, new Date());
+      console.table(unavailableRooms);
+    }
   });
 
   // sent from Room for each visitor (who warned each Room Visitor occupied)
@@ -159,14 +116,22 @@ io.on('connection', function (socket) {
   // Visitor sends this message
   // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', function (data) {
+    if (!getRooms().includes(data.visitor)) {
+      console.log(`${data.visitor}'s room is empty. Reopening now.`);
+      socket.join(data.visitor);
+    }
+
     socket.visitor = data.visitor;
     socket.payload = data;
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
-    joinRoom(socket, data.room);
-    if (newVisitor(data.visitor)) {
-      socket.join(data.visitor);
-    }
+    socket.join(data.room);
+    console.log('After entering room, all occupied rooms:');
+    listOccupiedRooms();
+
+    console.log(
+      '-------------------------------------------------------------------'
+    );
     // handled by Room.checkIn()
     io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
@@ -187,7 +152,13 @@ io.on('connection', function (socket) {
       message: data.message,
     });
 
-    leaveRoom(socket, data.room);
+    socket.leave(data.room);
+    console.log(
+      `Sockets in ${data.visitor}'s Room: `,
+      io.nsps[namespace].adapter.rooms[data.visitor]
+    );
+    console.log('After leaving room, remaining occupied:');
+    listOccupiedRooms();
   });
 
   // Rooms
@@ -195,13 +166,16 @@ io.on('connection', function (socket) {
     try {
       socket.room = data.room;
       console.log(getNow(), 'socket.id opening:>> ', socket.room, socket.id);
-      joinRoom(socket, socket.room);
+      socket.join(data.room);
       ack({
         message: `${data.room}, you are open for business. Keep your people safe today.`,
         error: '',
       });
-
-      updateAvailableRooms();
+      // updateAvailableRooms();
+      let availableRooms = getRooms(true);
+      console.table('availableRooms:', availableRooms);
+      // handled by Visitor.availableRooms()
+      io.of(namespace).emit('availableRooms', availableRooms);
     } catch (error) {
       console.error('Oops, openRoom() hit this:', error.message);
     }
@@ -209,8 +183,9 @@ io.on('connection', function (socket) {
 
   socket.on('closeRoom', function (data, ack) {
     try {
-      console.log('socket.id closing:>> ', socket.room, socket.id);
-      leaveRoom(socket, socket.room);
+      console.log('socket.id closing:>> ', socket.id);
+      // leaveRoom(socket, socket.room);
+      socket.leave(socket.room);
       io.in(data.room).send(
         `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
       );
@@ -225,6 +200,10 @@ io.on('connection', function (socket) {
     } catch (error) {
       console.error('Oops, closeRoom() hit this:', error.message);
     }
+  });
+
+  socket.on('pingServer', function (data, ack) {
+    ack(`Server is at your disposal, ${data}`);
   });
 
   socket.on('listAllSockets', (data, ack) => {
@@ -244,7 +223,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.02.20.25'.magenta);
+  console.log('Build: 09.07.14.15'.magenta);
   console.log(M().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
