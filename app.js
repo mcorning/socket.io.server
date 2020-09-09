@@ -55,9 +55,14 @@ const updateAvailableRooms = () => {
   io.of(namespace).emit('availableRooms', availableRooms);
   console.log();
 };
+
 const updateOccupancy = (room) => {
-  let r = Object.entries(io.nsps[namespace].adapter.rooms[room]);
-  let occupancy = r[1][1];
+  let r = io.nsps[namespace].adapter.rooms[room];
+  if (!r) {
+    return 0;
+  }
+  let entries = Object.entries(r);
+  let occupancy = entries[1][1];
   io.of(namespace).emit('updatedOccupancy', {
     room: room,
     occupancy: occupancy,
