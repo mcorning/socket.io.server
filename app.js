@@ -34,7 +34,6 @@ const getRooms = (available = false, accupied = false) => {
   if (accupied) {
     return Object.entries(allRooms).filter((v) => v[1].length > 1);
   }
-
   return rooms;
 };
 
@@ -56,7 +55,14 @@ const updateAvailableRooms = () => {
   io.of(namespace).emit('availableRooms', availableRooms);
   console.log();
 };
-
+const updateOccupancy = (room) => {
+  let r = Object.entries(io.nsps[namespace].adapter.rooms[room]);
+  let occupancy = r[1][1];
+  io.of(namespace).emit('updatedOccupancy', {
+    room: room,
+    occupancy: occupancy,
+  });
+};
 // Heavy lifting below
 //=============================================================================//
 // called when a connection changes
@@ -140,6 +146,8 @@ io.on('connection', function (socket) {
       message: data.message,
       socketId: socket.id,
     });
+
+    updateOccupancy(data.room);
   });
 
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
@@ -151,6 +159,7 @@ io.on('connection', function (socket) {
       room: data.room,
       message: data.message,
     });
+    updateOccupancy(data.room);
 
     socket.leave(data.room);
     console.log(
