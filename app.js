@@ -75,6 +75,7 @@ io.on('connection', function (socket) {
     console.log(io.nsps[namespace].adapter.rooms[visitor]);
     console.log();
     ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
+    io.to(socket.id).emit('availableRooms', getRooms(true));
   });
 
   //Alerts
