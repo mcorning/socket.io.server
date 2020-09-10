@@ -74,15 +74,6 @@ const updateOccupancy = (room) => {
 io.on('connection', function (socket) {
   console.log(socket.id, 'connected');
 
-  socket.on('openMyRoom', function (visitor, ack) {
-    console.log(`Opening ${visitor}'s Room`);
-    socket.join(visitor);
-    console.log(io.nsps[namespace].adapter.rooms[visitor]);
-    console.log();
-    ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
-    io.to(socket.id).emit('availableRooms', getRooms(true));
-  });
-
   //Alerts
   // Server handles two incoming alerts:
   //   exposureWarning
@@ -99,7 +90,11 @@ io.on('connection', function (socket) {
     let availableRooms = getRooms(true);
     if (availableRooms.includes(message.room)) {
       console.table(availableRooms);
-      io.to(message.room).emit('notifyRoom', date);
+      // pass message.room because more than one room may use the same socket (e.g., an iPad may be used in the Cafe and the Galley).
+      io.to(message.room).emit('notifyRoom', {
+        date: date,
+        room: message.room,
+      });
       let msg = `Server: ${message.room} warned of possible exposure from ${date}`;
       ack(msg);
       console.info(`${getNow()} ${msg}`);
@@ -119,6 +114,24 @@ io.on('connection', function (socket) {
       console.info(message.visitor, 'alerted');
       socket.to(message.visitor).emit('exposureAlert', message.message);
       ack(`Server: Alerted ${message.visitor}`);
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
+  // Admin events (for Room managers use)
+  socket.on('exposeOccupiedRooms', () => {
+    try {
+      let rooms = getRooms(null, true);
+      io.to(socket.id).emit('occupiedRoomsExposed', rooms);
+    } catch (error) {
+      console.error(error);
+    }
+  });
+  socket.on('exposeAvailableRooms', () => {
+    try {
+      let rooms = getRooms(true);
+      io.to(socket.id).emit('availableRoomsExposed', rooms);
     } catch (error) {
       console.error(error);
     }
@@ -174,6 +187,20 @@ io.on('connection', function (socket) {
     );
     console.log('After leaving room, remaining occupied:');
     listOccupiedRooms();
+  });
+
+  // called when a Visitor's room is closed or disconnected
+  socket.on('openMyRoom', function (visitor, ack) {
+    console.log(`Opening ${visitor}'s Room`);
+    socket.join(visitor);
+    console.log(io.nsps[namespace].adapter.rooms[visitor]);
+    console.log();
+    ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
+    let availableRooms = getRooms(true);
+    io.to(socket.id).emit('availableRooms', availableRooms);
+    console.log(`Updating ${visitor}/${socket.id} with availableRooms:`);
+    console.table(availableRooms);
+    console.log();
   });
 
   // Rooms
