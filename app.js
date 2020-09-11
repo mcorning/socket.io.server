@@ -20,6 +20,7 @@ app.get('/', function (req, res) {
 let namespace = '/';
 const unavailableRooms = new Map();
 const ROOM_TYPE = {
+  RAW: 0,
   AVAILABLE: 1,
   OCCUPIED: 2,
   VISITOR: 4,
@@ -31,94 +32,94 @@ const getNow = () => {
 
 const getRooms = (roomType) => {
   const allRooms = io.nsps[namespace].adapter.rooms;
-  let rooms = Object.keys(allRooms);
+
+  if (roomType == ROOM_TYPE.RAW) {
+    return allRooms;
+  }
+
+  let rooms;
   switch (roomType) {
     case ROOM_TYPE.AVAILABLE:
-      let x = rooms.filter((v) => v.includes('.'));
-      let y = x.map((v) => {
-        return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
-      });
-      return y;
+      rooms = Object.keys(allRooms)
+        .filter((v) => v.includes('.'))
+        .map((v) => {
+          return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
+        });
+      console.log('Available Rooms:');
+      console.table(rooms);
+      io.of(namespace).emit('availableRoomsExposed', rooms);
+      return rooms;
+
     case ROOM_TYPE.OCCUPIED:
-      return Object.entries(allRooms).filter((v) => v[1].length > 1);
+      rooms = Object.entries(allRooms).filter((v) => v[1].length > 1);
+      console.log('Occupied Rooms:');
+      console.table(rooms);
+      io.of(namespace).emit('occupiedRoomsExposed', rooms);
+      return rooms;
 
     case ROOM_TYPE.VISITOR:
-      return rooms
+      rooms = Object.keys(allRooms)
         .filter((v) => !v.includes('.') && v.length < 20)
         .map((v) => {
           return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
         });
-  }
-};
-const exposeAvailableRooms = (socket) => {
-  try {
-    let rooms = getRooms(ROOM_TYPE.AVAILABLE);
-    io.to(socket.id).emit('availableRoomsExposed', rooms);
-  } catch (error) {
-    console.error(error);
+      console.log('Visitors Rooms:');
+      console.table(rooms);
+      io.of(namespace).emit('visitorsRoomsExposed', rooms);
+      return rooms;
   }
 };
 
-const exposeOccupiedRooms = (socket) => {
-  try {
-    let rooms = getRooms(ROOM_TYPE.OCCUPIED);
-    io.to(socket.id).emit('occupiedRoomsExposed', rooms);
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const exposeVisitorsRooms = (socket) => {
-  try {
-    let rooms = getRooms(ROOM_TYPE.VISITOR);
-    io.to(socket.id).emit('visitorsRoomsExposed', rooms);
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const listOccupiedRooms = () => {
-  // publicRooms is the entries array of rooms
-  publicRooms = getRooms(ROOM_TYPE.OCCUPIED);
-  console.log(getNow(), 'All accupied Rooms (array)');
-  console.table(publicRooms);
-  let sockets = publicRooms.map((r) => r[1].sockets).map((v) => Object.keys(v));
-  console.log('Occupying Sockets:');
-  console.table(sockets);
-  console.log();
-};
-
-const updateAvailableRooms = () => {
-  let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-  console.info(getNow(), 'emitting availableRooms event with:');
-  console.table(availableRooms);
-  io.of(namespace).emit('availableRooms', availableRooms);
-  console.log();
-};
-
+// room is undefined when all we need to do is update visitors rooms
 const updateOccupancy = (room) => {
-  let r = io.nsps[namespace].adapter.rooms[room];
-  if (!r) {
-    return 0;
+  if (room) {
+    let allRooms = getRooms(ROOM_TYPE.RAW);
+    let occupancy = allRooms[room].length;
+    let rooms = Object.entries(allRooms).filter((v) => v[1].length > 1);
+    io.of(namespace).emit('occupiedRoomsExposed', rooms);
+    io.of(namespace).emit('updatedOccupancy', {
+      room: room,
+      occupancy: occupancy,
+    });
   }
-  let entries = Object.entries(r);
-  let occupancy = entries[1][1];
-  io.of(namespace).emit('updatedOccupancy', {
-    room: room,
-    occupancy: occupancy,
-  });
+  // here getRooms() will fire visitorsRoomsExposed event so Admin sees updated list of Visitors
+  let otherVisitors = getRooms(ROOM_TYPE.VISITOR);
+  console.log('Other Visitors');
+  console.table(otherVisitors);
+  console.log();
 };
+
 // Heavy lifting below
 //=============================================================================//
 // called when a connection changes
 io.on('connection', function (socket) {
   console.log(socket.id, 'connected');
 
+  socket.on('welcomeAdmin', (nsp, ack) => {
+    console.log(getNow(), 'namespace before:', namespace);
+    namespace = nsp;
+    console.log(getNow(), 'namespace after:', namespace);
+    console.log();
+    ack(`Server is using namespace: ${namespace}`);
+  });
+
   //Alerts
   // Server handles two incoming alerts:
-  //   exposureWarning
-  //   alertVisitor
+  //   alertVisitor...
 
+  // sent from Room for each visitor (who warned each Room Visitor occupied)
+  socket.on('alertVisitor', function (message, ack) {
+    // Visitor message includes the Room names to alert
+    try {
+      console.info(message.visitor, 'alerted');
+      socket.to(message.visitor).emit('exposureAlert', message.message);
+      ack(`Server: Alerted ${message.visitor}`);
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
+  // ...exposureWarning
   // For each Room occupied, Visitor sends exposureWarning with the visit date
   // (see Visitor.vue:warnRooms())
   // message: {roomId, date}
@@ -150,34 +151,46 @@ io.on('connection', function (socket) {
     }
   });
 
-  // sent from Room for each visitor (who warned each Room Visitor occupied)
-  socket.on('alertVisitor', function (message, ack) {
-    // Visitor message includes the Room names to alert
-    try {
-      console.info(message.visitor, 'alerted');
-      socket.to(message.visitor).emit('exposureAlert', message.message);
-      ack(`Server: Alerted ${message.visitor}`);
-    } catch (error) {
-      console.error(error);
-    }
-  });
-
   // Admin events (for Room managers use)
   socket.on('exposeOccupiedRooms', () => {
-    exposeOccupiedRooms(socket);
+    getRooms(ROOM_TYPE.OCCUPIED);
   });
   socket.on('exposeAvailableRooms', () => {
-    exposeAvailableRooms(socket);
+    getRooms(ROOM_TYPE.AVAILABLE);
   });
   socket.on('exposeVisitorsRooms', () => {
-    exposeVisitorsRooms(socket);
+    getRooms(ROOM_TYPE.VISITOR);
   });
 
   // Visitors
+  // called when a Visitor's room is closed or disconnected
+  socket.on('openMyRoom', function (visitor, ack) {
+    socket.join(visitor);
+
+    console.log(`Opened ${visitor}'s Room`);
+    console.log(getRooms(ROOM_TYPE.RAW)[visitor]);
+    console.log();
+    ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
+
+    updateOccupancy();
+    // // getRooms() will fire availableRoomsExposed event so Visitor sees updated list of Rooms
+    // let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
+    // // io.to(socket.id).emit('availableRooms', availableRooms);
+    // console.log(`Updating ${visitor}/${socket.id} with availableRooms:`);
+    // console.table(availableRooms);
+    // console.log();
+
+    // // here getRooms() will fire visitorsRoomsExposed event so Admin sees updated list of Visitors
+    // let otherVisitors = getRooms(ROOM_TYPE.VISITOR);
+    // console.log('Other Visitors');
+    // console.table(otherVisitors);
+    // console.log();
+  });
+
   // Visitor sends this message
   // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', function (data) {
-    if (!getRooms(ROOM_TYPE.VISITOR).includes(data.visitor)) {
+    if (!getRooms(ROOM_TYPE.RAW)[data.visitor]) {
       console.log(`${data.visitor}'s room is empty. Reopening now.`);
       socket.join(data.visitor);
     }
@@ -188,8 +201,6 @@ io.on('connection', function (socket) {
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     socket.join(data.room);
     console.log('After entering room, all occupied rooms:');
-    listOccupiedRooms();
-
     console.log(
       '-------------------------------------------------------------------'
     );
@@ -203,11 +214,12 @@ io.on('connection', function (socket) {
     });
 
     updateOccupancy(data.room);
-    exposeVisitorsRooms(socket);
   });
 
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
   socket.on('leaveRoom', function (data, ack) {
+    socket.leave(data.room);
+
     // handled by Room.checkOut()
     io.to(data.room).emit('checkOut', {
       visitor: data.visitor,
@@ -215,31 +227,13 @@ io.on('connection', function (socket) {
       room: data.room,
       message: data.message,
     });
+
     updateOccupancy(data.room);
 
-    socket.leave(data.room);
     console.log(
       `Sockets in ${data.visitor}'s Room: `,
-      io.nsps[namespace].adapter.rooms[data.visitor]
+      getRooms(ROOM_TYPE.RAW)[data.visitor]
     );
-    console.log('After leaving room, remaining occupied:');
-    listOccupiedRooms();
-    exposeVisitorsRooms(socket);
-  });
-
-  // called when a Visitor's room is closed or disconnected
-  socket.on('openMyRoom', function (visitor, ack) {
-    console.log(`Opening ${visitor}'s Room`);
-    socket.join(visitor);
-    console.log(io.nsps[namespace].adapter.rooms[visitor]);
-    console.log();
-    ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
-    let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-    io.to(socket.id).emit('availableRooms', availableRooms);
-    console.log(`Updating ${visitor}/${socket.id} with availableRooms:`);
-    console.table(availableRooms);
-    console.log();
-    exposeVisitorsRooms(socket);
   });
 
   // Rooms
@@ -252,12 +246,8 @@ io.on('connection', function (socket) {
         message: `${data.room}, you are open for business. Keep your people safe today.`,
         error: '',
       });
-      // updateAvailableRooms();
-      let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-      console.table('availableRooms:', availableRooms);
-      // handled by Visitor.availableRooms()
-      io.of(namespace).emit('availableRooms', availableRooms);
-      exposeAvailableRooms(socket);
+
+      getRooms(ROOM_TYPE.AVAILABLE);
     } catch (error) {
       console.error('Oops, openRoom() hit this:', error.message);
     }
@@ -278,7 +268,7 @@ io.on('connection', function (socket) {
             : `Closed room ${socket.room}. You can add it back later.`,
         error: '',
       });
-      updateAvailableRooms();
+      // updateAvailableRooms();
       exposeAvailableRooms(socket);
     } catch (error) {
       console.error('Oops, closeRoom() hit this:', error.message);
@@ -287,12 +277,6 @@ io.on('connection', function (socket) {
 
   socket.on('pingServer', function (data, ack) {
     ack(`Server is at your disposal, ${data}`);
-  });
-
-  socket.on('listAllSockets', (data, ack) => {
-    console.log('All open connections:');
-    console.log(Object.keys(io.sockets.clients().connected));
-    if (ack) ack(Object.keys(io.sockets.clients().connected));
   });
 
   socket.on('disconnect', () => {
@@ -306,7 +290,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.07.14.15'.magenta);
+  console.log('Build: 09.11.10.58'.magenta);
   console.log(M().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
