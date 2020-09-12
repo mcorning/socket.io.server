@@ -55,7 +55,9 @@ const getRooms = (roomType) => {
       return rooms;
 
     case ROOM_TYPE.OCCUPIED:
-      rooms = Object.entries(allRooms).filter((v) => v[1].length > 1);
+      rooms = Object.entries(allRooms).filter(
+        (v) => v.includes('.') && v[1].length > 1
+      );
       console.log('Occupied Rooms:');
       console.table(rooms);
       io.of(namespace).emit('occupiedRoomsExposed', rooms);
