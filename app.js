@@ -31,6 +31,10 @@ const getNow = () => {
 };
 
 const getRooms = (roomType) => {
+  if (!io.nsps[namespace]) {
+    console.error(`${namespace} is invalid. Reset to default "/" value.`);
+    namespace = '/';
+  }
   const allRooms = io.nsps[namespace].adapter.rooms;
 
   if (roomType == ROOM_TYPE.RAW) {
@@ -97,7 +101,7 @@ io.on('connection', function (socket) {
 
   socket.on('welcomeAdmin', (nsp, ack) => {
     console.log(getNow(), 'namespace before:', namespace);
-    namespace = nsp;
+    //namespace = nsp;
     console.log(getNow(), 'namespace after:', namespace);
     console.log();
     ack(`Server is using namespace: ${namespace}`);
@@ -290,7 +294,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.11.10.58'.magenta);
+  console.log('Build: 09.11.17.45'.magenta);
   console.log(M().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
