@@ -141,7 +141,7 @@ io.on('connection', function (socket) {
     if (availableRooms.filter((v) => v.name == message.room)) {
       // pass message.room because more than one room may use the same socket (e.g., an iPad may be used in the Cafe and the Galley).
       io.to(message.room).emit('notifyRoom', {
-        date: date,
+        exposureDate: new Date(date).toISOString(),
         room: message.room,
       });
       let msg = `Server: ${message.room} warned of possible exposure from ${date}`;
@@ -298,7 +298,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.14.18.22'.magenta);
+  console.log('Build: 09.14.20.13'.magenta);
   console.log(M().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
