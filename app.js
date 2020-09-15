@@ -56,7 +56,7 @@ const getRooms = (roomType) => {
 
     case ROOM_TYPE.OCCUPIED:
       rooms = Object.entries(allRooms).filter(
-        (v) => v.includes('.') && v[1].length > 1
+        (v) => v[0].includes('.') && v[1].length > 1
       );
       console.log('Occupied Rooms:');
       console.table(rooms);
@@ -78,11 +78,11 @@ const getRooms = (roomType) => {
 
 // room is undefined when all we need to do is update visitors rooms
 const updateOccupancy = (room) => {
-  if (room) {
-    let allRooms = getRooms(ROOM_TYPE.RAW);
-    let occupancy = allRooms[room].length;
-    let rooms = Object.entries(allRooms).filter((v) => v[1].length > 1);
-    io.of(namespace).emit('occupiedRoomsExposed', rooms);
+  let allRooms = getRooms(ROOM_TYPE.RAW);
+
+  if (room && allRooms[room]) {
+    let occupancy = allRooms[room].length || 0;
+    io.of(namespace).emit('occupiedRoomsExposed', getRooms(ROOM_TYPE));
     io.of(namespace).emit('updatedOccupancy', {
       room: room,
       occupancy: occupancy,
@@ -135,8 +135,10 @@ io.on('connection', function (socket) {
     // Visitor message includes the Room name to alert
     let date = M(message.sentTime).format('llll');
     let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-    if (availableRooms.includes(message.room)) {
-      console.table(availableRooms);
+    console.log('Available Rooms:');
+    console.table(availableRooms);
+
+    if (availableRooms.filter((v) => v.name == message.room)) {
       // pass message.room because more than one room may use the same socket (e.g., an iPad may be used in the Cafe and the Galley).
       io.to(message.room).emit('notifyRoom', {
         date: date,
@@ -146,13 +148,13 @@ io.on('connection', function (socket) {
       ack(msg);
       console.info(`${getNow()} ${msg}`);
     } else {
-      console.info('Current Available Visitors:');
-      console.table(getRooms(ROOM_TYPE.VISITOR));
-      console.warn(`${message.room} is not available to be warned`);
+      // console.info('Current Available Visitors:');
+      // console.table(getRooms(ROOM_TYPE.VISITOR));
+      // console.warn(`${message.room} is not available to be warned`);
 
       // update map for later warning when message.room (aka Visitor) logs in
       unavailableRooms.set(message.room, new Date());
-      console.info('Current Unavailable Visitors:');
+      console.info('Current Unavailable Rooms:');
       console.table(unavailableRooms);
     }
   });
