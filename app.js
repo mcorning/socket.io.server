@@ -82,7 +82,9 @@ const updateOccupancy = (room) => {
 
   if (room && allRooms[room]) {
     let occupancy = allRooms[room].length || 0;
-    io.of(namespace).emit('occupiedRoomsExposed', getRooms(ROOM_TYPE));
+    // getRooms() will fire occupiedRoomsExposed event
+    getRooms(ROOM_TYPE.OCCUPIED);
+    // io.of(namespace).emit('occupiedRoomsExposed', occupied);
     io.of(namespace).emit('updatedOccupancy', {
       room: room,
       occupancy: occupancy,
