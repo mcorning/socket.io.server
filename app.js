@@ -1,3 +1,5 @@
+// jshint esversion: 6
+
 // express code
 require('colors');
 const express = require('express');
@@ -7,7 +9,7 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http);
 const port = process.env.PORT || 3003;
 
-const M = require('moment');
+const moment = require('moment');
 
 app.use(express.static(__dirname));
 
@@ -27,7 +29,7 @@ const ROOM_TYPE = {
 };
 // Server helper methods
 const getNow = () => {
-  return M().format('lll');
+  return moment().format('lll');
 };
 
 const getRooms = (roomType) => {
@@ -127,6 +129,45 @@ io.on('connection', function (socket) {
     }
   });
 
+  // A Visitor has collected all the rooms and dates visited
+  // Visitor sends each Room with visited dates in an object
+  socket.on('exposureWarning2', function (message, ack) {
+    // Example message:
+    // {
+    //   RoomA: ['2020.09.10', '2020.09.10', '2020.09.12'],
+    // };
+    console.log('exposureWarnings', message);
+    // Server checks for availability of each Room
+    let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
+    if (availableRooms.filter((v) => v.name == message.room)) {
+      // and sends the warning to the Room for processing
+      const payload = {
+        exposureDates: message.warningDates,
+        room: message.room,
+      };
+      console.log('payload:');
+      console.table(payload);
+      io.to(message.room).emit(
+        'notifyRoom',
+        {
+          visitor: message.visitor,
+          exposureDates: message.warningDates,
+          room: message.room,
+        },
+        ack(`${message.room} notified`)
+      );
+    } else {
+      // if Room is unavailable, add Room to list to notify the next time Room connects
+      unavailableRooms.set(message.room, new Date());
+      // and advise the visitor of the delayed alert
+      ack(
+        `${message.room} is unavailable ${moment().format(
+          'llll'
+        )}. Warnings deferred until Room comes online.`
+      );
+    }
+  });
+
   // ...exposureWarning
   // For each Room occupied, Visitor sends exposureWarning with the visit date
   // (see Visitor.vue:warnRooms())
@@ -135,7 +176,7 @@ io.on('connection', function (socket) {
   // Room handles notifyRoom event
   socket.on('exposureWarning', function (message, ack) {
     // Visitor message includes the Room name to alert
-    let date = M(message.sentTime).format('llll');
+    let date = moment(message.sentTime).format('llll');
     let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
     console.log('Available Rooms:');
     console.table(availableRooms);
@@ -227,7 +268,7 @@ io.on('connection', function (socket) {
   });
 
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
-  socket.on('leaveRoom', function (data, ack) {
+  socket.on('leaveRoom', function (data) {
     socket.leave(data.room);
 
     // handled by Room.checkOut()
@@ -278,8 +319,6 @@ io.on('connection', function (socket) {
             : `Closed room ${socket.room}. You can add it back later.`,
         error: '',
       });
-      // updateAvailableRooms();
-      exposeAvailableRooms(socket);
     } catch (error) {
       console.error('Oops, closeRoom() hit this:', error.message);
     }
@@ -301,7 +340,7 @@ io.on('connection', function (socket) {
 
 http.listen(port, function () {
   console.log('Build: 09.14.20.13'.magenta);
-  console.log(M().format('llll').magenta);
+  console.log(moment().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
 });
