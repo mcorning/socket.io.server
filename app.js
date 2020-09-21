@@ -20,7 +20,7 @@ app.get('/', function (req, res) {
 
 // globals
 let namespace = '/';
-const unavailableRooms = new Map();
+let unavailableRooms = new Set();
 const ROOM_TYPE = {
   RAW: 0,
   AVAILABLE: 1,
@@ -31,6 +31,24 @@ const ROOM_TYPE = {
 const getNow = () => {
   return moment().format('lll');
 };
+
+function intersection(setA, setB) {
+  let _intersection = new Set();
+  for (let elem of setB) {
+    if (setA.has(elem)) {
+      _intersection.add(elem);
+    }
+  }
+  return _intersection;
+}
+
+function difference(setA, setB) {
+  let _difference = new Set(setA);
+  for (let elem of setB) {
+    _difference.delete(elem);
+  }
+  return _difference;
+}
 
 const getRooms = (roomType) => {
   if (!io.nsps[namespace]) {
@@ -131,6 +149,84 @@ io.on('connection', function (socket) {
 
   // A Visitor has collected all the rooms and dates visited
   // Visitor sends each Room with visited dates in an object
+  socket.on('exposureWarning3', function (message, ack) {
+    // Example message:
+    // {
+    //    sentTime:'2020-09-19T00:56:54.570Z'
+    //    visitor:'Nurse Jackie'
+    //    warnings:{
+    //      Heathlands.Medical:[
+    //        '2020-09-19T00:33:04.248Z', '2020-09-19T00:35:38.078Z', '2020-09-14T02:53:33.738Z', '2020-09-18T02:53:35.050Z'
+    //      ]
+    //    }
+    // };
+
+    const { sentTime, visitor, warnings } = message;
+    console.log('exposureWarnings', JSON.stringify(message));
+    console.table(message);
+
+    let exposed = new Set(Object.keys(warnings));
+    console.log('exposed', [...exposed]);
+
+    let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
+    if (!availableRooms.length) {
+      unavailableRooms = exposed;
+      ack(
+        `No rooms online. Will warn ${[...unavailableRooms]} when they connect.`
+      );
+      return;
+    }
+    let available = new Set(availableRooms.map((v) => v.name));
+    console.log('available', [...available]);
+
+    unavailableRooms = difference(exposed, available);
+    console.log('unavailableRooms', unavailableRooms);
+
+    let alerted = intersection(exposed, available);
+
+    alerted.forEach((room) => {
+      let warning = warnings[room];
+      exposureDates = warning[0];
+      console.log(room);
+      console.log('Warning Room:', room, 'with', exposureDates);
+      io.to(room).emit(
+        'notifyRoom',
+        {
+          visitor: visitor,
+          exposureDates: exposureDates, // exposure dates array
+          room: room,
+        },
+        ack(`${room} notified`)
+      );
+    });
+    // if (availableRooms.filter((v) => v.name == message.room)) {
+    //   // and sends the warning to the Room for processing
+    //   const payload = {
+    //     exposureDates: message.warningDates,
+    //     room: message.room,
+    //   };
+    //   console.log('payload:');
+    //   console.table(payload);
+    //   io.to(message.room).emit(
+    //     'notifyRoom',
+    //     {
+    //       visitor: message.visitor,
+    //       exposureDates: message.warningDates,
+    //       room: message.room,
+    //     },
+    //     ack(`${message.room} notified`)
+    //   );
+    // } else {
+    //   // if Room is unavailable, add Room to list to notify the next time Room connects
+    //   unavailableRooms.set(message.room, new Date());
+    //   // and advise the visitor of the delayed alert
+    //   ack(
+    //     `${message.room} is unavailable ${moment().format(
+    //       'llll'
+    //     )}. Warnings deferred until Room comes online.`
+    //   );
+    // }
+  });
   socket.on('exposureWarning2', function (message, ack) {
     // Example message:
     // {
@@ -319,6 +415,8 @@ io.on('connection', function (socket) {
             : `Closed room ${socket.room}. You can add it back later.`,
         error: '',
       });
+
+      getRooms(ROOM_TYPE.AVAILABLE);
     } catch (error) {
       console.error('Oops, closeRoom() hit this:', error.message);
     }
