@@ -16,11 +16,15 @@ app.use(express.static(__dirname));
 app.get('/', function (req, res) {
   res.sendFile(__dirname + '/index.html');
 });
+process.on('uncaughtException', (err) => {
+  console.error('There was an uncaught error', err);
+  process.exit(1); //mandatory (as per the Node.js docs)
+});
 // end express code
 
 // globals
 let namespace = '/';
-let unavailableRooms = new Set();
+let pendingRoomWarnings = new Map();
 const ROOM_TYPE = {
   RAW: 0,
   AVAILABLE: 1,
@@ -30,6 +34,29 @@ const ROOM_TYPE = {
 // Server helper methods
 const getNow = () => {
   return moment().format('lll');
+};
+
+const checkPendingWarnings = (room) => {
+  console.log('checkPendingWarnings for', room);
+  if (!pendingRoomWarnings.size) {
+    return;
+  }
+  // key is the message sent from the Visitor (stored as value)
+  pendingRoomWarnings.forEach((value, key) => {
+    console.log('checking Room', room);
+    if (Object.keys(key.warnings).includes(room)) {
+      const message = {
+        visitor: key.visitor,
+        exposureDates: key.warnings[room],
+        room: room,
+      };
+      console.log('message in notifyRoom');
+      console.table(message);
+      // sending to individual socketid (private message)
+      io.to(room).emit('notifyRoom', message);
+      pendingRoomWarnings.delete(key);
+    }
+  });
 };
 
 function intersection(setA, setB) {
@@ -63,6 +90,19 @@ const getRooms = (roomType) => {
 
   let rooms;
   switch (roomType) {
+    case ROOM_TYPE.PENDING:
+      if (!pendingRoomWarnings.size) {
+        return [];
+      }
+
+      console.log('pendingRoomWarnings:', [...pendingRoomWarnings.values()]);
+      // sending to all clients in namespace 'myNamespace', including sender
+      io.of(namespace).emit('pendingRoomWarningsExposed', [
+        ...pendingRoomWarnings.values(),
+      ]);
+
+      break;
+
     case ROOM_TYPE.AVAILABLE:
       rooms = Object.keys(allRooms)
         .filter((v) => v.includes('.'))
@@ -71,6 +111,7 @@ const getRooms = (roomType) => {
         });
       console.log('Available Rooms:');
       console.table(rooms);
+      // sending to all clients in namespace 'myNamespace', including sender
       io.of(namespace).emit('availableRoomsExposed', rooms);
       return rooms;
 
@@ -80,6 +121,7 @@ const getRooms = (roomType) => {
       );
       console.log('Occupied Rooms:');
       console.table(rooms);
+      // sending to all clients in namespace 'myNamespace', including sender
       io.of(namespace).emit('occupiedRoomsExposed', rooms);
       return rooms;
 
@@ -91,6 +133,7 @@ const getRooms = (roomType) => {
         });
       console.log('Visitors Rooms:');
       console.table(rooms);
+      // sending to all clients in namespace 'myNamespace', including sender
       io.of(namespace).emit('visitorsRoomsExposed', rooms);
       return rooms;
   }
@@ -104,7 +147,7 @@ const updateOccupancy = (room) => {
     let occupancy = allRooms[room].length || 0;
     // getRooms() will fire occupiedRoomsExposed event
     getRooms(ROOM_TYPE.OCCUPIED);
-    // io.of(namespace).emit('occupiedRoomsExposed', occupied);
+    // sending to all clients in namespace 'myNamespace', including sender
     io.of(namespace).emit('updatedOccupancy', {
       room: room,
       occupancy: occupancy,
@@ -140,6 +183,7 @@ io.on('connection', function (socket) {
     // Visitor message includes the Room names to alert
     try {
       console.info(message.visitor, 'alerted');
+      // sending to all clients in 'game' room except sender
       socket.to(message.visitor).emit('exposureAlert', message.message);
       ack(`Server: Alerted ${message.visitor}`);
     } catch (error) {
@@ -149,7 +193,9 @@ io.on('connection', function (socket) {
 
   // A Visitor has collected all the rooms and dates visited
   // Visitor sends each Room with visited dates in an object
-  socket.on('exposureWarning3', function (message, ack) {
+  // If a Room is unavailable, we cache the warning and
+  // derefernce the Room name in checkPendingWarnings().
+  socket.on('exposureWarning', function (message, ack) {
     // Example message:
     // {
     //    sentTime:'2020-09-19T00:56:54.570Z'
@@ -165,30 +211,69 @@ io.on('connection', function (socket) {
     console.log('exposureWarnings', JSON.stringify(message));
     console.table(message);
 
-    let exposed = new Set(Object.keys(warnings));
-    console.log('exposed', [...exposed]);
-
     let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
     if (!availableRooms.length) {
-      unavailableRooms = exposed;
+      // add all Rooms in message to the cache.
+      pendingRoomWarnings.set(message);
+      // Object.entries(message).forEach((m) => {
+      //   pendingRoomWarnings.set({
+      //     visitor: m.visitor,
+      //     warnings: m.warnings,
+      //     sentTime: m.sentTime,
+      //   });
+      // });
+
+      console.table('Entire message contains pendingRoomWarnings', [
+        ...pendingRoomWarnings,
+      ]);
+
       ack(
-        `No rooms online. Will warn ${[...unavailableRooms]} when they connect.`
+        `No rooms online. Will warn ${Object.keys(message)} when they connect.`
       );
       return;
     }
+
+    // we use set operations to identify unavailable Rooms
+    // the first set contains available Rooms
     let available = new Set(availableRooms.map((v) => v.name));
     console.log('available', [...available]);
 
-    unavailableRooms = difference(exposed, available);
-    console.log('unavailableRooms', unavailableRooms);
+    // start with the full list in the message from the Visitor
+    let exposed = new Set(Object.keys(warnings));
+    console.log('exposed', [...exposed]);
+
+    // now we separate the wheat from the chaff
+    pendingRooms = difference(exposed, available);
+    console.log('pendingRooms:', pendingRooms);
+    // cache pending warnings
+    // {
+    //    sentTime:'2020-09-19T00:56:54.570Z'
+    //    visitor:'Nurse Jackie'
+    //    warnings:{
+    //      Heathlands.Medical:[
+    //        '2020-09-19T00:33:04.248Z', '2020-09-19T00:35:38.078Z', '2020-09-14T02:53:33.738Z', '2020-09-18T02:53:35.050Z'
+    //      ]
+    //    }
+    // };
+    pendingRooms.forEach((room) => {
+      let x = {};
+      pendingRoomWarnings.set({
+        visitor: visitor,
+        warnings: (x[room] = warnings[room]),
+        sentTime: sentTime,
+      });
+    });
+    console.log('pendingRoomWarnings', [...pendingRoomWarnings]);
 
     let alerted = intersection(exposed, available);
-
+    // notify online Rooms
     alerted.forEach((room) => {
       let warning = warnings[room];
       exposureDates = warning[0];
       console.log(room);
       console.log('Warning Room:', room, 'with', exposureDates);
+
+      // sending to individual socketid (private message)
       io.to(room).emit(
         'notifyRoom',
         {
@@ -199,108 +284,14 @@ io.on('connection', function (socket) {
         ack(`${room} notified`)
       );
     });
-    // if (availableRooms.filter((v) => v.name == message.room)) {
-    //   // and sends the warning to the Room for processing
-    //   const payload = {
-    //     exposureDates: message.warningDates,
-    //     room: message.room,
-    //   };
-    //   console.log('payload:');
-    //   console.table(payload);
-    //   io.to(message.room).emit(
-    //     'notifyRoom',
-    //     {
-    //       visitor: message.visitor,
-    //       exposureDates: message.warningDates,
-    //       room: message.room,
-    //     },
-    //     ack(`${message.room} notified`)
-    //   );
-    // } else {
-    //   // if Room is unavailable, add Room to list to notify the next time Room connects
-    //   unavailableRooms.set(message.room, new Date());
-    //   // and advise the visitor of the delayed alert
-    //   ack(
-    //     `${message.room} is unavailable ${moment().format(
-    //       'llll'
-    //     )}. Warnings deferred until Room comes online.`
-    //   );
-    // }
-  });
-  socket.on('exposureWarning2', function (message, ack) {
-    // Example message:
-    // {
-    //   RoomA: ['2020.09.10', '2020.09.10', '2020.09.12'],
-    // };
-    console.log('exposureWarnings', message);
-    // Server checks for availability of each Room
-    let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-    if (availableRooms.filter((v) => v.name == message.room)) {
-      // and sends the warning to the Room for processing
-      const payload = {
-        exposureDates: message.warningDates,
-        room: message.room,
-      };
-      console.log('payload:');
-      console.table(payload);
-      io.to(message.room).emit(
-        'notifyRoom',
-        {
-          visitor: message.visitor,
-          exposureDates: message.warningDates,
-          room: message.room,
-        },
-        ack(`${message.room} notified`)
-      );
-    } else {
-      // if Room is unavailable, add Room to list to notify the next time Room connects
-      unavailableRooms.set(message.room, new Date());
-      // and advise the visitor of the delayed alert
-      ack(
-        `${message.room} is unavailable ${moment().format(
-          'llll'
-        )}. Warnings deferred until Room comes online.`
-      );
-    }
-  });
-
-  // ...exposureWarning
-  // For each Room occupied, Visitor sends exposureWarning with the visit date
-  // (see Visitor.vue:warnRooms())
-  // message: {roomId, date}
-  // Server forwards message to Room
-  // Room handles notifyRoom event
-  socket.on('exposureWarning', function (message, ack) {
-    // Visitor message includes the Room name to alert
-    let date = moment(message.sentTime).format('llll');
-    let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-    console.log('Available Rooms:');
-    console.table(availableRooms);
-
-    if (availableRooms.filter((v) => v.name == message.room)) {
-      // pass message.room because more than one room may use the same socket (e.g., an iPad may be used in the Cafe and the Galley).
-      io.to(message.room).emit('notifyRoom', {
-        exposureDate: new Date(date).toISOString(),
-        room: message.room,
-      });
-      let msg = `Server: ${message.room} warned of possible exposure from ${date}`;
-      ack(msg);
-      console.info(`${getNow()} ${msg}`);
-    } else {
-      // console.info('Current Available Visitors:');
-      // console.table(getRooms(ROOM_TYPE.VISITOR));
-      // console.warn(`${message.room} is not available to be warned`);
-
-      // update map for later warning when message.room (aka Visitor) logs in
-      unavailableRooms.set(message.room, new Date());
-      console.info('Current Unavailable Rooms:');
-      console.table(unavailableRooms);
-    }
   });
 
   // Admin events (for Room managers use)
   socket.on('exposeOccupiedRooms', () => {
     getRooms(ROOM_TYPE.OCCUPIED);
+  });
+  socket.on('exposePendingRooms', () => {
+    getRooms(ROOM_TYPE.PENDING);
   });
   socket.on('exposeAvailableRooms', () => {
     getRooms(ROOM_TYPE.AVAILABLE);
@@ -317,7 +308,7 @@ io.on('connection', function (socket) {
     console.log(`Opened ${visitor}'s Room`);
     console.log(getRooms(ROOM_TYPE.RAW)[visitor]);
     console.log();
-    ack(`Server says "Your room is ready to receive messages, ${visitor}"`);
+    ack(`Server says, "Your room is ready to receive messages, ${visitor}"`);
 
     updateOccupancy();
     // // getRooms() will fire availableRoomsExposed event so Visitor sees updated list of Rooms
@@ -352,6 +343,7 @@ io.on('connection', function (socket) {
       '-------------------------------------------------------------------'
     );
     // handled by Room.checkIn()
+    // sending to individual socketid (private message)
     io.to(data.room).emit('checkIn', {
       visitor: data.visitor,
       sentTime: data.sentTime,
@@ -368,6 +360,7 @@ io.on('connection', function (socket) {
     socket.leave(data.room);
 
     // handled by Room.checkOut()
+    // sending to individual socketid (private message)
     io.to(data.room).emit('checkOut', {
       visitor: data.visitor,
       sentTime: data.sentTime,
@@ -395,6 +388,7 @@ io.on('connection', function (socket) {
       });
 
       getRooms(ROOM_TYPE.AVAILABLE);
+      checkPendingWarnings(data.room);
     } catch (error) {
       console.error('Oops, openRoom() hit this:', error.message);
     }
@@ -437,7 +431,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.14.20.13'.magenta);
+  console.log('Build: 09.22.16.40'.magenta);
   console.log(moment().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
