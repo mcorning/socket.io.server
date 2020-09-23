@@ -25,6 +25,7 @@ process.on('uncaughtException', (err) => {
 // globals
 let namespace = '/';
 let pendingRoomWarnings = new Map();
+let pendingRooms = new Set();
 const ROOM_TYPE = {
   RAW: 0,
   AVAILABLE: 1,
@@ -91,15 +92,13 @@ const getRooms = (roomType) => {
   let rooms;
   switch (roomType) {
     case ROOM_TYPE.PENDING:
-      if (!pendingRoomWarnings.size) {
+      if (!pendingRooms.size) {
         return [];
       }
 
-      console.log('pendingRoomWarnings:', [...pendingRoomWarnings.values()]);
+      console.log('pendingRooms:', [...pendingRooms.values()]);
       // sending to all clients in namespace 'myNamespace', including sender
-      io.of(namespace).emit('pendingRoomWarningsExposed', [
-        ...pendingRoomWarnings.values(),
-      ]);
+      io.of(namespace).emit('pendingRoomsExposed', [...pendingRooms.values()]);
 
       break;
 
@@ -107,6 +106,8 @@ const getRooms = (roomType) => {
       rooms = Object.keys(allRooms)
         .filter((v) => v.includes('.'))
         .map((v) => {
+          checkPendingWarnings(v);
+
           return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
         });
       console.log('Available Rooms:');
@@ -215,13 +216,6 @@ io.on('connection', function (socket) {
     if (!availableRooms.length) {
       // add all Rooms in message to the cache.
       pendingRoomWarnings.set(message);
-      // Object.entries(message).forEach((m) => {
-      //   pendingRoomWarnings.set({
-      //     visitor: m.visitor,
-      //     warnings: m.warnings,
-      //     sentTime: m.sentTime,
-      //   });
-      // });
 
       console.table('Entire message contains pendingRoomWarnings', [
         ...pendingRoomWarnings,
@@ -257,9 +251,10 @@ io.on('connection', function (socket) {
     // };
     pendingRooms.forEach((room) => {
       let x = {};
+      x[room] = warnings[room];
       pendingRoomWarnings.set({
         visitor: visitor,
-        warnings: (x[room] = warnings[room]),
+        warnings: x,
         sentTime: sentTime,
       });
     });
@@ -304,6 +299,7 @@ io.on('connection', function (socket) {
   // called when a Visitor's room is closed or disconnected
   socket.on('openMyRoom', function (visitor, ack) {
     socket.join(visitor);
+    getRooms(ROOM_TYPE.AVAILABLE);
 
     console.log(`Opened ${visitor}'s Room`);
     console.log(getRooms(ROOM_TYPE.RAW)[visitor]);
@@ -311,18 +307,6 @@ io.on('connection', function (socket) {
     ack(`Server says, "Your room is ready to receive messages, ${visitor}"`);
 
     updateOccupancy();
-    // // getRooms() will fire availableRoomsExposed event so Visitor sees updated list of Rooms
-    // let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-    // // io.to(socket.id).emit('availableRooms', availableRooms);
-    // console.log(`Updating ${visitor}/${socket.id} with availableRooms:`);
-    // console.table(availableRooms);
-    // console.log();
-
-    // // here getRooms() will fire visitorsRoomsExposed event so Admin sees updated list of Visitors
-    // let otherVisitors = getRooms(ROOM_TYPE.VISITOR);
-    // console.log('Other Visitors');
-    // console.table(otherVisitors);
-    // console.log();
   });
 
   // Visitor sends this message
@@ -388,7 +372,6 @@ io.on('connection', function (socket) {
       });
 
       getRooms(ROOM_TYPE.AVAILABLE);
-      checkPendingWarnings(data.room);
     } catch (error) {
       console.error('Oops, openRoom() hit this:', error.message);
     }
@@ -422,6 +405,7 @@ io.on('connection', function (socket) {
 
   socket.on('disconnect', () => {
     console.log(getNow(), `Disconnecting Socket ${socket.id} `);
+    getRooms(ROOM_TYPE.AVAILABLE);
   });
 
   socket.on('disconnectAll', () => {
@@ -431,7 +415,7 @@ io.on('connection', function (socket) {
 });
 
 http.listen(port, function () {
-  console.log('Build: 09.22.16.40'.magenta);
+  console.log('Build: 09.22.23.40'.magenta);
   console.log(moment().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
