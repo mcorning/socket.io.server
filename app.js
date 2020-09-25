@@ -176,9 +176,6 @@ io.on('connection', function (socket) {
   });
 
   //Alerts
-  // Server handles two incoming alerts:
-  //   alertVisitor...
-
   // sent from Room for each visitor (who warned each Room Visitor occupied)
   socket.on('alertVisitor', function (message, ack) {
     // Visitor message includes the Room names to alert
@@ -264,7 +261,7 @@ io.on('connection', function (socket) {
     // notify online Rooms
     alerted.forEach((room) => {
       let warning = warnings[room];
-      exposureDates = warning[0];
+      exposureDates = warning;
       console.log(room);
       console.log('Warning Room:', room, 'with', exposureDates);
 
