@@ -25,12 +25,14 @@ process.on('uncaughtException', (err) => {
 // globals
 let namespace = '/';
 let pendingRoomWarnings = new Map();
+let pendingVisitors = new Map();
 let pendingRooms = new Set();
 const ROOM_TYPE = {
   RAW: 0,
   AVAILABLE: 1,
   OCCUPIED: 2,
   VISITOR: 4,
+  PENDING: 8,
 };
 // Server helper methods
 const getNow = () => {
@@ -166,6 +168,9 @@ const updateOccupancy = (room) => {
 // called when a connection changes
 io.on('connection', function (socket) {
   console.log(socket.id, 'connected');
+  console.log(new Date(), 'on connection: pendingVisitors:', [
+    ...pendingVisitors,
+  ]);
 
   socket.on('welcomeAdmin', (nsp, ack) => {
     console.log(getNow(), 'namespace before:', namespace);
@@ -180,10 +185,22 @@ io.on('connection', function (socket) {
   socket.on('alertVisitor', function (message, ack) {
     // Visitor message includes the Room names to alert
     try {
-      console.info(message.visitor, 'alerted');
-      // sending to all clients in 'game' room except sender
-      socket.to(message.visitor).emit('exposureAlert', message.message);
-      ack(`Server: Alerted ${message.visitor}`);
+      // Ensure Visitor is online to see alert, otherwise cache and send when they login again
+      let online = Object.keys(getRooms(ROOM_TYPE.RAW)).filter(
+        (v) => v === message.visitor
+      );
+      if (online.length == 0) {
+        pendingVisitors.set(message.visitor, message.message);
+        console.log(new Date(), 'pendingVisitors:');
+        console.log([...pendingVisitors]);
+        io.of(namespace).emit('pendingVisitorsExposed', [...pendingVisitors]);
+        ack(`Server: ${message.visitor} unavailable. Deferred alert.`);
+      } else {
+        console.info(message.visitor, 'alerted');
+        // sending to all clients in 'game' room except sender
+        socket.to(message.visitor).emit('exposureAlert', message.message);
+        ack(`Server: Alerted ${message.visitor}`);
+      }
     } catch (error) {
       console.error(error);
     }
@@ -273,7 +290,7 @@ io.on('connection', function (socket) {
           exposureDates: exposureDates, // exposure dates array
           room: room,
         },
-        ack(`${room} notified`)
+        ack(`Server: ${room} notified`)
       );
     });
   });
@@ -300,6 +317,14 @@ io.on('connection', function (socket) {
 
     console.log(`Opened ${visitor}'s Room`);
     console.log(getRooms(ROOM_TYPE.RAW)[visitor]);
+    console.log(new Date(), '\non openMyRoom: pendingVisitors:', [
+      ...pendingVisitors,
+    ]);
+    // Check for pending warnings for this Visitor
+    if (pendingVisitors.has(visitor)) {
+      // sending to all clients in 'game' room except sender
+      socket.emit('exposureAlert', pendingVisitors.get(visitor));
+    }
     console.log();
     ack(`Server says, "Your room is ready to receive messages, ${visitor}"`);
 
