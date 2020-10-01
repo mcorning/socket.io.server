@@ -486,7 +486,7 @@ io.on('connection', (socket) => {
 // }, 1000);
 
 http.listen(port, function () {
-  console.log('Build: 09.24.17.42'.magenta);
+  console.log('Build: 09.30.16.30'.magenta);
   console.log(moment().format('llll').magenta);
   console.log(`listening on http://localhost: ${port}`.magenta);
   console.log();
