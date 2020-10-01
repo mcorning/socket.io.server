@@ -23,6 +23,7 @@ process.on('uncaughtException', (err) => {
 // end express code
 
 // globals
+let sequenceNumberByClient = new Map();
 let namespace = '/';
 let pendingRoomWarnings = new Map();
 let pendingVisitors = new Map();
@@ -87,11 +88,18 @@ const getRooms = (roomType) => {
   }
   const allRooms = io.nsps[namespace].adapter.rooms;
 
+  let rooms;
+
   if (roomType == ROOM_TYPE.RAW) {
+    //make rooms look like this: '[{"name":"Heathlands.Medical","id":"P9AdUxzLaJqE3i1PAAAA"}]'
+
+    rooms = Object.keys(allRooms).map((v) => {
+      return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
+    });
+    io.of(namespace).emit('allRoomsExposed', rooms);
     return allRooms;
   }
 
-  let rooms;
   switch (roomType) {
     case ROOM_TYPE.PENDING:
       if (!pendingRooms.size) {
@@ -166,7 +174,9 @@ const updateOccupancy = (room) => {
 // Heavy lifting below
 //=============================================================================//
 // called when a connection changes
-io.on('connection', function (socket) {
+io.on('connection', (socket) => {
+  sequenceNumberByClient.set(socket, 1);
+
   console.log(socket.id, 'connected');
   console.log(new Date(), 'on connection: pendingVisitors:', [
     ...pendingVisitors,
@@ -213,8 +223,8 @@ io.on('connection', function (socket) {
   socket.on('exposureWarning', function (message, ack) {
     // Example message:
     // {
-    //    sentTime:'2020-09-19T00:56:54.570Z'
-    //    visitor:'Nurse Jackie'
+    //    sentTime:'2020-09-19T00:56:54.570Z',
+    //    visitor:'Nurse Jackie',
     //    warnings:{
     //      Heathlands.Medical:[
     //        '2020-09-19T00:33:04.248Z', '2020-09-19T00:35:38.078Z', '2020-09-14T02:53:33.738Z', '2020-09-18T02:53:35.050Z'
@@ -236,7 +246,9 @@ io.on('connection', function (socket) {
       ]);
 
       ack(
-        `No rooms online. Will warn ${Object.keys(message)} when they connect.`
+        `WARNING: No rooms online. Will warn ${Object.keys(
+          message
+        )} when they connect.`
       );
       return;
     }
@@ -247,6 +259,13 @@ io.on('connection', function (socket) {
     console.log('available', [...available]);
 
     // start with the full list in the message from the Visitor
+    if (!warnings) {
+      let msg =
+        'WARNING: No warnings exposed. This is probably a contract violation. Check client code for proper message format.';
+      ack ? ack(msg) : console.log(msg);
+
+      return;
+    }
     let exposed = new Set(Object.keys(warnings));
     console.log('exposed', [...exposed]);
 
@@ -296,6 +315,9 @@ io.on('connection', function (socket) {
   });
 
   // Admin events (for Room managers use)
+  socket.on('exposeAllRooms', () => {
+    getRooms(ROOM_TYPE.RAW);
+  });
   socket.on('exposeOccupiedRooms', () => {
     getRooms(ROOM_TYPE.OCCUPIED);
   });
@@ -312,10 +334,11 @@ io.on('connection', function (socket) {
   // Visitors
   // called when a Visitor's room is closed or disconnected
   socket.on('openMyRoom', function (visitor, ack) {
+    console.log(`Opening ${visitor}'s Room`);
+    socket.name = visitor;
     socket.join(visitor);
-    getRooms(ROOM_TYPE.AVAILABLE);
+    const availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
 
-    console.log(`Opened ${visitor}'s Room`);
     console.log(getRooms(ROOM_TYPE.RAW)[visitor]);
     console.log(new Date(), '\non openMyRoom: pendingVisitors:', [
       ...pendingVisitors,
@@ -326,9 +349,18 @@ io.on('connection', function (socket) {
       socket.emit('exposureAlert', pendingVisitors.get(visitor));
     }
     console.log();
-    ack(`Server says, "Your room is ready to receive messages, ${visitor}"`);
+    ack({
+      rooms: availableRooms,
+      message: `Server says, "Your room is ready to receive messages, ${visitor}"`,
+    });
 
     updateOccupancy();
+
+    // manual test of testing model
+    if (visitor.includes('.')) {
+      console.warn('TESTING ALERT. THIS IS ONLY A DRILL.');
+      socket.emit('exposureAlert', 'You may have been exposed to COVID-19');
+    }
   });
 
   // Visitor sends this message
@@ -388,11 +420,12 @@ io.on('connection', function (socket) {
       socket.room = data.room;
       console.log(getNow(), 'socket.id opening:>> ', socket.room, socket.id);
       socket.join(data.room);
-      ack({
-        message: `${data.room}, you are open for business. Keep your people safe today.`,
-        error: '',
-      });
-
+      if (ack) {
+        ack({
+          message: `${socket.room}, you are open for business. Keep your people safe today.`,
+          error: '',
+        });
+      }
       getRooms(ROOM_TYPE.AVAILABLE);
     } catch (error) {
       console.error('Oops, openRoom() hit this:', error.message);
@@ -401,7 +434,7 @@ io.on('connection', function (socket) {
 
   socket.on('closeRoom', function (data, ack) {
     try {
-      console.log('socket.id closing:>> ', socket.id);
+      console.log(`${socket.id} is leaving Room ${socket.room}`);
       // leaveRoom(socket, socket.room);
       socket.leave(socket.room);
       io.in(data.room).send(
@@ -425,8 +458,16 @@ io.on('connection', function (socket) {
     ack(`Server is at your disposal, ${data}`);
   });
 
-  socket.on('disconnect', () => {
-    console.log(getNow(), `Disconnecting Socket ${socket.id} `);
+  socket.on('disconnect', (reason) => {
+    sequenceNumberByClient.delete(socket);
+
+    console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.warn(
+      getNow(),
+      `Disconnecting Socket ${socket.name} (${socket.id}) `
+    );
+    console.warn('Reason:', reason);
+    console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     getRooms(ROOM_TYPE.AVAILABLE);
   });
 
@@ -435,6 +476,14 @@ io.on('connection', function (socket) {
     console.log('Remaining connections :>> ', io.sockets.connected);
   });
 });
+
+// sends each client its current sequence number
+// setInterval(() => {
+//   for (const [client, sequenceNumber] of sequenceNumberByClient.entries()) {
+//     client.emit('seq-num', sequenceNumber);
+//     sequenceNumberByClient.set(client, sequenceNumber + 1);
+//   }
+// }, 1000);
 
 http.listen(port, function () {
   console.log('Build: 09.24.17.42'.magenta);
