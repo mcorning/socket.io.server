@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
         ack(`Server: ${message.visitor} unavailable. Deferred alert.`);
       } else {
         console.info(message.visitor, 'alerted');
-        // sending to all clients in 'game' room except sender
+        // sending to visitor socket in visitor's room (except sender)
         socket.to(message.visitor).emit('exposureAlert', message.message);
         ack(`Server: Alerted ${message.visitor}`);
       }
@@ -486,7 +486,7 @@ io.on('connection', (socket) => {
 // }, 1000);
 
 http.listen(port, function () {
-  console.log('Build: 10.04.23.31'.magenta);
+  console.log('Build: 10.05.20.15'.magenta);
   console.log(moment().format('llll').magenta);
   console.log(
     `socket.io server listening on http://localhost: ${port}`.magenta
