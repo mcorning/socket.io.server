@@ -1,7 +1,13 @@
 // jshint esversion: 6
 
 // express code
-require('colors');
+// require('colors');
+const clc = require('cli-color');
+const success = clc.red.green;
+const error = clc.red.bold;
+const warn = clc.yellow;
+const notice = clc.magenta;
+const bold = clc.bold;
 const express = require('express');
 const app = express();
 
@@ -10,6 +16,7 @@ const io = require('socket.io')(http);
 const port = process.env.PORT || 3003;
 
 const moment = require('moment');
+const DEBUG = 0;
 
 app.use(express.static(__dirname));
 
@@ -23,7 +30,6 @@ process.on('uncaughtException', (err) => {
 // end express code
 
 // globals
-let sequenceNumberByClient = new Map();
 let namespace = '/';
 let pendingRoomWarnings = new Map();
 let pendingVisitors = new Map();
@@ -35,27 +41,61 @@ const ROOM_TYPE = {
   VISITOR: 4,
   PENDING: 8,
 };
+
 // Server helper methods
+// multiplexing method can be called by Visitor or Room
+// uses the same socket to carry any Room or Visitor
+function openMyRoom(socket) {
+  const name = socket.handshake.query.token;
+  console.log(`Opening ${name}'s Room`);
+  socket.join(name);
+  let x = new Map(Object.entries(getRooms(ROOM_TYPE.RAW)));
+  if (x.has(name)) {
+    console.log(success(`${name}'s Room is open`));
+  } else {
+    console.log(error(`Could not find ${name}'s Room`));
+  }
+  console.log('Checking for pending warnings for', name);
+  // Check for pending warnings for this Visitor
+  if (pendingVisitors.has(name)) {
+    // sending to all clients in 'game' room except sender
+    console.log(warn('Emitting exposureAlert'));
+    socket.emit('exposureAlert', pendingVisitors.get(name));
+  } else {
+    console.log('No pending warnings for', name);
+  }
+
+  if (name.includes('.')) {
+    updateOccupancy();
+
+    // manual test of testing model
+    if (DEBUG) {
+      console.warn('TESTING ALERT. THIS IS ONLY A DRILL.');
+      socket.emit('exposureAlert', 'You may have been exposed to COVID-19');
+    }
+  }
+}
+
 const getNow = () => {
   return moment().format('lll');
 };
 
-const checkPendingWarnings = (room) => {
-  console.log('checkPendingWarnings for', room);
+const checkPendingRoomWarnings = (room) => {
+  console.log('In checkPendingRoomWarnings for', room);
   if (!pendingRoomWarnings.size) {
     return;
   }
   // key is the message sent from the Visitor (stored as value)
   pendingRoomWarnings.forEach((value, key) => {
-    console.log('checking Room', room);
+    console.log('Checking for pending warnings for Room', room);
     if (Object.keys(key.warnings).includes(room)) {
       const message = {
         visitor: key.visitor,
         exposureDates: key.warnings[room],
         room: room,
       };
-      console.log('message in notifyRoom');
-      console.table(message);
+      DEBUG && console.log('message in notifyRoom');
+      DEBUG && console.table(message);
       // sending to individual socketid (private message)
       io.to(room).emit('notifyRoom', message);
       pendingRoomWarnings.delete(key);
@@ -116,7 +156,7 @@ const getRooms = (roomType) => {
       rooms = Object.keys(allRooms)
         .filter((v) => v.includes('.'))
         .map((v) => {
-          checkPendingWarnings(v);
+          checkPendingRoomWarnings(v);
 
           return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
         });
@@ -166,7 +206,7 @@ const updateOccupancy = (room) => {
   }
   // here getRooms() will fire visitorsRoomsExposed event so Admin sees updated list of Visitors
   let otherVisitors = getRooms(ROOM_TYPE.VISITOR);
-  console.log('Other Visitors');
+  console.log('Other Visitors?');
   console.table(otherVisitors);
   console.log();
 };
@@ -175,8 +215,10 @@ const updateOccupancy = (room) => {
 //=============================================================================//
 // called when a connection changes
 io.on('connection', (socket) => {
-  sequenceNumberByClient.set(socket, 1);
-
+  if (socket.handshake.query.token) {
+    console.log('Opening connection to ', socket.handshake.query.token);
+    openMyRoom(socket);
+  }
   console.log(socket.id, 'connected');
   console.log(new Date(), 'on connection: pendingVisitors:', [
     ...pendingVisitors,
@@ -219,7 +261,7 @@ io.on('connection', (socket) => {
   // A Visitor has collected all the rooms and dates visited
   // Visitor sends each Room with visited dates in an object
   // If a Room is unavailable, we cache the warning and
-  // derefernce the Room name in checkPendingWarnings().
+  // derefernce the Room name in checkPendingRoomWarnings().
   socket.on('exposureWarning', function (message, ack) {
     // Example message:
     // {
@@ -459,8 +501,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    sequenceNumberByClient.delete(socket);
-
     console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     console.warn(
       getNow(),
@@ -477,19 +517,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// sends each client its current sequence number
-// setInterval(() => {
-//   for (const [client, sequenceNumber] of sequenceNumberByClient.entries()) {
-//     client.emit('seq-num', sequenceNumber);
-//     sequenceNumberByClient.set(client, sequenceNumber + 1);
-//   }
-// }, 1000);
-
 http.listen(port, function () {
-  console.log('Build: 10.05.20.15'.magenta);
-  console.log(moment().format('llll').magenta);
+  console.log(notice('Build: 10.05.20.15'));
+  console.log(notice(moment().format('llll')));
   console.log(
-    `socket.io server listening on http://localhost: ${port}`.magenta
+    notice(`socket.io server listening on http://localhost: ${port}`)
   );
   console.log();
 });
