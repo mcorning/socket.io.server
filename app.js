@@ -6,7 +6,8 @@ const clc = require('cli-color');
 const success = clc.red.green;
 const error = clc.red.bold;
 const warn = clc.yellow;
-const notice = clc.magenta;
+const notice = clc.blue;
+const highlight = clc.magenta;
 const bold = clc.bold;
 const express = require('express');
 const app = express();
@@ -47,15 +48,16 @@ const ROOM_TYPE = {
 // uses the same socket to carry any Room or Visitor
 function openMyRoom(socket) {
   const name = socket.handshake.query.token;
-  console.log(`Opening ${name}'s Room`);
+  console.groupCollapsed();
+
   socket.join(name);
   let x = new Map(Object.entries(getRooms(ROOM_TYPE.RAW)));
   if (x.has(name)) {
-    console.log(success(`${name}'s Room is open`));
+    console.log(success(`${name}'s socket ${socket.id} added to Room`));
   } else {
     console.log(error(`Could not find ${name}'s Room`));
   }
-  console.log('Checking for pending warnings for', name);
+
   // Check for pending warnings for this Visitor
   if (pendingVisitors.has(name)) {
     // sending to all clients in 'game' room except sender
@@ -74,6 +76,7 @@ function openMyRoom(socket) {
       socket.emit('exposureAlert', 'You may have been exposed to COVID-19');
     }
   }
+  console.groupEnd();
 }
 
 const getNow = () => {
@@ -157,8 +160,9 @@ const getRooms = (roomType) => {
         .filter((v) => v.includes('.'))
         .map((v) => {
           checkPendingRoomWarnings(v);
-
-          return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
+          if (allRooms[v]) {
+            return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
+          }
         });
       console.log('Available Rooms:');
       console.table(rooms);
@@ -205,9 +209,8 @@ const updateOccupancy = (room) => {
     });
   }
   // here getRooms() will fire visitorsRoomsExposed event so Admin sees updated list of Visitors
-  let otherVisitors = getRooms(ROOM_TYPE.VISITOR);
-  console.log('Other Visitors?');
-  console.table(otherVisitors);
+  getRooms(ROOM_TYPE.VISITOR);
+
   console.log();
 };
 
@@ -216,21 +219,16 @@ const updateOccupancy = (room) => {
 // called when a connection changes
 io.on('connection', (socket) => {
   if (socket.handshake.query.token) {
-    console.log('Opening connection to ', socket.handshake.query.token);
+    console.log(' ');
+    console.log(
+      highlight(
+        moment().format('HH:mm:ss'),
+        'Opening connection to a',
+        socket.handshake.query.token
+      )
+    );
     openMyRoom(socket);
   }
-  console.log(socket.id, 'connected');
-  console.log(new Date(), 'on connection: pendingVisitors:', [
-    ...pendingVisitors,
-  ]);
-
-  socket.on('welcomeAdmin', (nsp, ack) => {
-    console.log(getNow(), 'namespace before:', namespace);
-    //namespace = nsp;
-    console.log(getNow(), 'namespace after:', namespace);
-    console.log();
-    ack(`Server is using namespace: ${namespace}`);
-  });
 
   //Alerts
   // sent from Room for each visitor (who warned each Room Visitor occupied)
@@ -373,38 +371,6 @@ io.on('connection', (socket) => {
     getRooms(ROOM_TYPE.VISITOR);
   });
 
-  // Visitors
-  // called when a Visitor's room is closed or disconnected
-  socket.on('openMyRoom', function (visitor, ack) {
-    console.log(`Opening ${visitor}'s Room`);
-    socket.name = visitor;
-    socket.join(visitor);
-    const availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
-
-    console.log(getRooms(ROOM_TYPE.RAW)[visitor]);
-    console.log(new Date(), '\non openMyRoom: pendingVisitors:', [
-      ...pendingVisitors,
-    ]);
-    // Check for pending warnings for this Visitor
-    if (pendingVisitors.has(visitor)) {
-      // sending to all clients in 'game' room except sender
-      socket.emit('exposureAlert', pendingVisitors.get(visitor));
-    }
-    console.log();
-    ack({
-      rooms: availableRooms,
-      message: `Server says, "Your room is ready to receive messages, ${visitor}"`,
-    });
-
-    updateOccupancy();
-
-    // manual test of testing model
-    if (visitor.includes('.')) {
-      console.warn('TESTING ALERT. THIS IS ONLY A DRILL.');
-      socket.emit('exposureAlert', 'You may have been exposed to COVID-19');
-    }
-  });
-
   // Visitor sends this message
   // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', function (data) {
@@ -459,9 +425,11 @@ io.on('connection', (socket) => {
   // Rooms
   socket.on('openRoom', function (data, ack) {
     try {
-      socket.room = data.room;
-      console.log(getNow(), 'socket.id opening:>> ', socket.room, socket.id);
-      socket.join(data.room);
+      // ensure the Room has a room
+
+      socket.room = data;
+      console.log('\n', getNow(), 'socket.id opening:>> ', data, socket.id);
+      socket.join(data);
       if (ack) {
         ack({
           message: `${socket.room}, you are open for business. Keep your people safe today.`,
