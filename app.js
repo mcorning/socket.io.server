@@ -46,16 +46,22 @@ const ROOM_TYPE = {
 // Server helper methods
 // multiplexing method can be called by Visitor or Room
 // uses the same socket to carry any Room or Visitor
+function peek(name) {
+  const json = io.nsps['/'].adapter.rooms[name].sockets;
+
+  let str = warn('sockets:', JSON.stringify(json, null, '\t'));
+  console.log(name, str);
+}
 function openMyRoom(socket) {
   const name = socket.handshake.query.token;
-  console.groupCollapsed();
+  console.groupCollapsed('openMyRoom: ');
 
   socket.join(name);
   let x = new Map(Object.entries(getRooms(ROOM_TYPE.RAW)));
   if (x.has(name)) {
     console.log(success(`${name}'s socket ${socket.id} added to Room`));
   } else {
-    console.log(error(`Could not find ${name}'s Room`));
+    +console.log(error(`Could not find ${name}'s Room`));
   }
 
   // Check for pending warnings for this Visitor
@@ -90,19 +96,22 @@ const checkPendingRoomWarnings = (room) => {
   }
   // key is the message sent from the Visitor (stored as value)
   pendingRoomWarnings.forEach((value, key) => {
-    console.log('Checking for pending warnings for Room', room);
+    console.group('Pending Warnings:');
+    let msg = 'No pending warnings';
     if (Object.keys(key.warnings).includes(room)) {
       const message = {
         visitor: key.visitor,
         exposureDates: key.warnings[room],
         room: room,
       };
-      DEBUG && console.log('message in notifyRoom');
+      msg = 'message in notifyRoom';
       DEBUG && console.table(message);
       // sending to individual socketid (private message)
       io.to(room).emit('notifyRoom', message);
       pendingRoomWarnings.delete(key);
     }
+    console.log(warn(msg));
+    console.groupEnd();
   });
 };
 
@@ -192,6 +201,25 @@ const getRooms = (roomType) => {
       io.of(namespace).emit('visitorsRoomsExposed', rooms);
       return rooms;
   }
+};
+
+const getSockets = () => {
+  let allSockets = Object.entries(io.nsps['/'].adapter.nsp.sockets).reduce(
+    (a, c) => {
+      let b = {
+        id: c[0],
+        token: c[1].handshake.query.token,
+        connected: c[1].connected,
+      };
+      a.push(b);
+      return a;
+    },
+    []
+  );
+  console.log('All Sockets:');
+  console.table(allSockets);
+
+  io.of(namespace).emit('allSocketsExposed', allSockets);
 };
 
 // room is undefined when all we need to do is update visitors rooms
@@ -358,6 +386,9 @@ io.on('connection', (socket) => {
   socket.on('exposeAllRooms', () => {
     getRooms(ROOM_TYPE.RAW);
   });
+  socket.on('exposeAllSockets', () => {
+    getSockets();
+  });
   socket.on('exposeOccupiedRooms', () => {
     getRooms(ROOM_TYPE.OCCUPIED);
   });
@@ -373,7 +404,7 @@ io.on('connection', (socket) => {
 
   // Visitor sends this message
   // disambiguate enterRoom event from the event handler in the Room, checkIn
-  socket.on('enterRoom', function (data) {
+  socket.on('enterRoom', function (data, ack) {
     if (!getRooms(ROOM_TYPE.RAW)[data.visitor]) {
       console.log(`${data.visitor}'s room is empty. Reopening now.`);
       socket.join(data.visitor);
@@ -384,10 +415,13 @@ io.on('connection', (socket) => {
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
     socket.join(data.room);
+
     console.log('After entering room, all occupied rooms:');
     console.log(
       '-------------------------------------------------------------------'
     );
+    peek(data.room);
+    peek(data.visitor);
     // handled by Room.checkIn()
     // sending to individual socketid (private message)
     io.to(data.room).emit('checkIn', {
@@ -399,10 +433,22 @@ io.on('connection', (socket) => {
     });
 
     updateOccupancy(data.room);
+
+    const x =
+      io.nsps['/'].adapter.rooms[data.room].sockets[
+        Object.keys(io.nsps[namespace].adapter.rooms[data.visitor].sockets)[0]
+      ];
+    const msg = `${data.visitor} ${x ? 'made it into' : 'did not make'} ${
+      data.room
+    } on ${getNow()} using socket ${socket.id}`;
+    console.log(warn('enterRoom():', msg));
+    if (ack) {
+      ack(msg);
+    }
   });
 
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
-  socket.on('leaveRoom', function (data) {
+  socket.on('leaveRoom', function (data, ack) {
     socket.leave(data.room);
 
     // handled by Room.checkOut()
@@ -416,10 +462,17 @@ io.on('connection', (socket) => {
 
     updateOccupancy(data.room);
 
-    console.log(
-      `Sockets in ${data.visitor}'s Room: `,
-      getRooms(ROOM_TYPE.RAW)[data.visitor]
-    );
+    const x =
+      io.nsps['/'].adapter.rooms[data.room].sockets[
+        Object.keys(io.nsps[namespace].adapter.rooms[data.visitor].sockets)[0]
+      ];
+    const msg = `${data.visitor} ${x ? 'remains in' : 'left'} ${
+      data.room
+    } on ${getNow()} using socket ${socket.id}`;
+    console.log(warn('enterRoom():', msg));
+    if (ack) {
+      ack(msg);
+    }
   });
 
   // Rooms
@@ -430,11 +483,16 @@ io.on('connection', (socket) => {
       socket.room = data;
       console.log('\n', getNow(), 'socket.id opening:>> ', data, socket.id);
       socket.join(data);
+      peek(data);
+      let x =
+        io.nsps['/'].adapter.rooms[data].sockets[
+          Object.keys(io.nsps[namespace].adapter.rooms[data].sockets)[0]
+        ];
+      let msg = `${data} ${
+        x ? 'is' : 'is not'
+      } open for visitors on ${getNow()} using socket ${socket.id}`;
       if (ack) {
-        ack({
-          message: `${socket.room}, you are open for business. Keep your people safe today.`,
-          error: '',
-        });
+        ack({ name: data, msg: msg, id: socket.id });
       }
       getRooms(ROOM_TYPE.AVAILABLE);
     } catch (error) {
@@ -468,15 +526,16 @@ io.on('connection', (socket) => {
     ack(`Server is at your disposal, ${data}`);
   });
 
-  socket.on('disconnect', (reason) => {
+  socket.on('disconnecting', (reason) => {
     console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     console.warn(
       getNow(),
-      `Disconnecting Socket ${socket.name} (${socket.id}) `
+      `Disconnecting Socket ${socket.handshake.query.token} (${socket.id}) `
     );
     console.warn('Reason:', reason);
     console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     getRooms(ROOM_TYPE.AVAILABLE);
+    getRooms(ROOM_TYPE.VISITOR);
   });
 
   socket.on('disconnectAll', () => {
