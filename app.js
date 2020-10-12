@@ -53,7 +53,7 @@ function peek(name) {
   console.log(name, str);
 }
 function openMyRoom(socket) {
-  const name = socket.handshake.query.token;
+  const name = socket.handshake.query.visitor || socket.handshake.query.room;
   console.groupCollapsed('openMyRoom: ');
 
   socket.join(name);
@@ -208,7 +208,8 @@ const getSockets = () => {
     (a, c) => {
       let b = {
         id: c[0],
-        token: c[1].handshake.query.token,
+        room: c[1].handshake.query.room,
+        visitor: c[1].handshake.query.visitor,
         connected: c[1].connected,
       };
       a.push(b);
@@ -246,13 +247,13 @@ const updateOccupancy = (room) => {
 //=============================================================================//
 // called when a connection changes
 io.on('connection', (socket) => {
-  if (socket.handshake.query.token) {
+  if (socket.handshake.query.visitor || socket.handshake.query.room) {
     console.log(' ');
     console.log(
       highlight(
         moment().format('HH:mm:ss'),
-        'Opening connection to a',
-        socket.handshake.query.token
+        'Opening connection to a Room for:',
+        socket.handshake.query.visitor || socket.handshake.query.room
       )
     );
     openMyRoom(socket);
@@ -284,22 +285,21 @@ io.on('connection', (socket) => {
     }
   });
 
-  // A Visitor has collected all the rooms and dates visited
-  // Visitor sends each Room with visited dates in an object
-  // If a Room is unavailable, we cache the warning and
-  // derefernce the Room name in checkPendingRoomWarnings().
+  // A Visitor has collected all the rooms and dates visited in the last 14 days.
+  // Visitor sends an exposure warning to each Room (with visited dates in an object parameter).
+  // Example message:
+  // {
+  //    sentTime:'2020-09-19T00:56:54.570Z',
+  //    visitor:'Nurse Jackie',
+  //    warnings:{
+  //       Heathlands.Medical:[
+  //         '2020-09-19T00:33:04.248Z', '2020-09-14T02:53:33.738Z', '2020-09-18T07:15:00.00Z'
+  //       ]
+  //    }
+  // };
+  // If a Room is not available (not online), we cache the warning.
+  // When a Room comes online, we derefernce the Room name in checkPendingRoomWarnings() and send any waiting warnings.
   socket.on('exposureWarning', function (message, ack) {
-    // Example message:
-    // {
-    //    sentTime:'2020-09-19T00:56:54.570Z',
-    //    visitor:'Nurse Jackie',
-    //    warnings:{
-    //      Heathlands.Medical:[
-    //        '2020-09-19T00:33:04.248Z', '2020-09-19T00:35:38.078Z', '2020-09-14T02:53:33.738Z', '2020-09-18T02:53:35.050Z'
-    //      ]
-    //    }
-    // };
-
     const { sentTime, visitor, warnings } = message;
     console.log('exposureWarnings', JSON.stringify(message));
     console.table(message);
@@ -530,7 +530,9 @@ io.on('connection', (socket) => {
     console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     console.warn(
       getNow(),
-      `Disconnecting Socket ${socket.handshake.query.token} (${socket.id}) `
+      `Disconnecting Socket ${
+        socket.handshake.query.visitor || socket.handshake.query.room
+      } (${socket.id}) `
     );
     console.warn('Reason:', reason);
     console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
