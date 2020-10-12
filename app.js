@@ -19,6 +19,20 @@ const port = process.env.PORT || 3003;
 const moment = require('moment');
 const DEBUG = 0;
 
+const url = require('url');
+const base64id = require('base64id');
+
+io.engine.generateId = (req) => {
+  const parsedUrl = new url.parse(req.url);
+  const params = new URLSearchParams(parsedUrl.search);
+  const prevId = params.get('id');
+  // prevId is either a valid id or an empty string
+  if (prevId) {
+    return prevId;
+  }
+  return base64id.generateId();
+};
+
 app.use(express.static(__dirname));
 
 app.get('/', function (req, res) {
@@ -206,10 +220,13 @@ const getRooms = (roomType) => {
 const getSockets = () => {
   let allSockets = Object.entries(io.nsps['/'].adapter.nsp.sockets).reduce(
     (a, c) => {
+      let query = c[1].handshake.query;
       let b = {
         id: c[0],
-        room: c[1].handshake.query.room,
-        visitor: c[1].handshake.query.visitor,
+        room: query.room,
+        visitor: query.visitor,
+        uniqueName: query.id,
+        namespace: query.nsp,
         connected: c[1].connected,
       };
       a.push(b);
@@ -253,7 +270,9 @@ io.on('connection', (socket) => {
       highlight(
         moment().format('HH:mm:ss'),
         'Opening connection to a Room for:',
-        socket.handshake.query.visitor || socket.handshake.query.room
+        socket.handshake.query.visitor || socket.handshake.query.room,
+        'using socketId:',
+        socket.handshake.query.id
       )
     );
     openMyRoom(socket);
