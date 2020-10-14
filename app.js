@@ -6,6 +6,7 @@ const clc = require('cli-color');
 const success = clc.red.green;
 const error = clc.red.bold;
 const warn = clc.yellow;
+const info = clc.cyan;
 const notice = clc.blue;
 const highlight = clc.magenta;
 const bold = clc.bold;
@@ -49,6 +50,7 @@ let namespace = '/';
 let pendingRoomWarnings = new Map();
 let pendingVisitors = new Map();
 let pendingRooms = new Set();
+
 const ROOM_TYPE = {
   RAW: 0,
   AVAILABLE: 1,
@@ -69,13 +71,16 @@ function peek(name) {
 function openMyRoom(socket) {
   const name = socket.handshake.query.visitor || socket.handshake.query.room;
   console.groupCollapsed('openMyRoom: ');
-
+  // it may be possible that a Visitor Room houses two different sockets with the same query.name (but different query.ids)
+  // so always check for the correct id given the subject socket
   socket.join(name);
   let x = new Map(Object.entries(getRooms(ROOM_TYPE.RAW)));
   if (x.has(name)) {
-    console.log(success(`${name}'s socket ${socket.id} added to Room`));
+    console.log(
+      success(`${name}'s socket ${socket.id} added to their own named Room`)
+    );
   } else {
-    +console.log(error(`Could not find ${name}'s Room`));
+    console.log(error(`Could not find ${name}'s Room`));
   }
 
   // Check for pending warnings for this Visitor
@@ -147,23 +152,53 @@ function difference(setA, setB) {
   return _difference;
 }
 
+const getAllRoomIds = () => {
+  return io.nsps[namespace].adapter.rooms;
+};
+const roomIdsIncludeSocket = (roomName, id) => {
+  return io.nsps[namespace].adapter.rooms[roomName].sockets[id];
+};
+
+const getAllSockets = () => {
+  let allSockets = Object.entries(io.nsps[namespace].adapter.nsp.sockets).map(
+    (v) => {
+      let q = v[1].handshake.query;
+      if (q.visitor) {
+        return { visitor: q.visitor, id: q.id, nsp: q.nsp };
+      }
+      return { room: q.room, id: q.id, nsp: q.nsp };
+    }
+  );
+  return allSockets;
+};
+
+const getAvailableRooms = () => {
+  return Object.entries(io.nsps[namespace].adapter.nsp.sockets)
+    .map((v) => v[1].handshake.query)
+    .filter((v) => v.room && v.room != 'undefined');
+};
+
+const getOccupiedRooms = () => {
+  rooms = Object.entries(getAllRoomIds).filter(
+    (v) => v[0].includes('.') && v[1].length > 1
+  );
+};
+
+const getVisitorRooms = () => {
+  return Object.entries(io.nsps[namespace].adapter.nsp.sockets)
+    .map((v) => v[1].handshake.query)
+    .filter((v) => v.visitor && v.visitor != 'undefined');
+};
+
 const getRooms = (roomType) => {
   if (!io.nsps[namespace]) {
     console.error(`${namespace} is invalid. Reset to default "/" value.`);
     namespace = '/';
   }
-  const allRooms = io.nsps[namespace].adapter.rooms;
-
   let rooms;
 
   if (roomType == ROOM_TYPE.RAW) {
-    //make rooms look like this: '[{"name":"Heathlands.Medical","id":"P9AdUxzLaJqE3i1PAAAA"}]'
-
-    rooms = Object.keys(allRooms).map((v) => {
-      return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
-    });
-    io.of(namespace).emit('allRoomsExposed', rooms);
-    return allRooms;
+    return getAllRoomIds();
   }
 
   switch (roomType) {
@@ -173,30 +208,29 @@ const getRooms = (roomType) => {
       }
 
       console.log('pendingRooms:', [...pendingRooms.values()]);
-      // sending to all clients in namespace 'myNamespace', including sender
+      console.log(
+        info(
+          `Emitting pendingRoomsExposed to all sockets in namespace ${namespace}`
+        )
+      );
       io.of(namespace).emit('pendingRoomsExposed', [...pendingRooms.values()]);
 
       break;
 
     case ROOM_TYPE.AVAILABLE:
-      rooms = Object.keys(allRooms)
-        .filter((v) => v.includes('.'))
-        .map((v) => {
-          checkPendingRoomWarnings(v);
-          if (allRooms[v]) {
-            return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
-          }
-        });
+      rooms = getAvailableRooms().map((v) => {
+        checkPendingRoomWarnings(v);
+        return { name: v.room, id: v.id, nsp: v.nsp };
+      });
       console.log('Available Rooms:');
       console.table(rooms);
-      // sending to all clients in namespace 'myNamespace', including sender
+      // sending to all clients in namespace, including sender
       io.of(namespace).emit('availableRoomsExposed', rooms);
       return rooms;
 
     case ROOM_TYPE.OCCUPIED:
-      rooms = Object.entries(allRooms).filter(
-        (v) => v[0].includes('.') && v[1].length > 1
-      );
+      // do we see length in keys?
+      rooms = Object.keys(getAllRoomIds).filter((v) => v[1].length > 1);
       console.log('Occupied Rooms:');
       console.table(rooms);
       // sending to all clients in namespace 'myNamespace', including sender
@@ -204,14 +238,17 @@ const getRooms = (roomType) => {
       return rooms;
 
     case ROOM_TYPE.VISITOR:
-      rooms = Object.keys(allRooms)
-        .filter((v) => !v.includes('.') && v.length < 20)
-        .map((v) => {
-          return { name: v, id: Object.keys(allRooms[v].sockets)[0] };
-        });
+      rooms = getVisitorRooms().map((v) => {
+        return { name: v.visitor, id: v.id, nsp: v.nsp };
+      });
       console.log('Visitors Rooms:');
       console.table(rooms);
       // sending to all clients in namespace 'myNamespace', including sender
+      console.log(
+        info(
+          `Emitting visitorsRoomsExposed to all sockets in namespace ${namespace}`
+        )
+      );
       io.of(namespace).emit('visitorsRoomsExposed', rooms);
       return rooms;
   }
@@ -238,6 +275,7 @@ const getSockets = () => {
   console.table(allSockets);
 
   io.of(namespace).emit('allSocketsExposed', allSockets);
+  return allSockets;
 };
 
 // room is undefined when all we need to do is update visitors rooms
@@ -257,7 +295,7 @@ const updateOccupancy = (room) => {
   // here getRooms() will fire visitorsRoomsExposed event so Admin sees updated list of Visitors
   getRooms(ROOM_TYPE.VISITOR);
 
-  console.log();
+  console.log(' ');
 };
 
 // Heavy lifting below
@@ -269,7 +307,7 @@ io.on('connection', (socket) => {
     console.log(
       highlight(
         moment().format('HH:mm:ss'),
-        'Opening connection to a Room for:',
+        'In connection handler: Opening connection to a Room for:',
         socket.handshake.query.visitor || socket.handshake.query.room,
         'using socketId:',
         socket.handshake.query.id
@@ -421,46 +459,45 @@ io.on('connection', (socket) => {
     getRooms(ROOM_TYPE.VISITOR);
   });
 
-  // Visitor sends this message
+  // Visitor sends this message:
+  // {visitor:{name, id, nsp}, room:{room, id, nsp}, message:{}, sentTime: dateTime}
   // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', function (data, ack) {
     if (!getRooms(ROOM_TYPE.RAW)[data.visitor]) {
-      console.log(`${data.visitor}'s room is empty. Reopening now.`);
-      socket.join(data.visitor);
+      console.log(`${data.visitor.name}'s room is empty. Reopening now.`);
+      socket.join(data.visitor.name);
     }
 
-    socket.visitor = data.visitor;
-    socket.payload = data;
+    // socket.visitor = data.visitor;
+    // socket.payload = data;
 
     // Enter the Room. As others enter, you will see a notification they, too, joined.
-    socket.join(data.room);
+    socket.join(data.room.room);
 
     console.log('After entering room, all occupied rooms:');
     console.log(
       '-------------------------------------------------------------------'
     );
-    peek(data.room);
-    peek(data.visitor);
+    peek(data.room.room);
+    peek(data.visitor.name);
     // handled by Room.checkIn()
     // sending to individual socketid (private message)
-    io.to(data.room).emit('checkIn', {
-      visitor: data.visitor,
+    io.to(data.room.room).emit('checkIn', {
+      visitor: data.visitor.name,
       sentTime: data.sentTime,
-      room: data.room,
-      message: data.message,
+      room: data.room.room,
+      message: data.warnings,
       socketId: socket.id,
     });
 
-    updateOccupancy(data.room);
+    updateOccupancy(data.room.room);
 
-    const x =
-      io.nsps['/'].adapter.rooms[data.room].sockets[
-        Object.keys(io.nsps[namespace].adapter.rooms[data.visitor].sockets)[0]
-      ];
-    const msg = `${data.visitor} ${x ? 'made it into' : 'did not make'} ${
-      data.room
-    } on ${getNow()} using socket ${socket.id}`;
-    console.log(warn('enterRoom():', msg));
+    const msg = `Using their own socket ${socket.id}, ${data.visitor.name} ${
+      roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
+        ? 'made it into'
+        : 'did not make it into'
+    } Room [${data.room.room} ${data.room.id}] on ${getNow()}`;
+    console.log(warn('Inside enterRoom():', msg));
     if (ack) {
       ack(msg);
     }
