@@ -198,7 +198,9 @@ const getRooms = (roomType) => {
   let rooms;
 
   if (roomType == ROOM_TYPE.RAW) {
-    return getAllRoomIds();
+    let roomIds = getAllRoomIds();
+    io.of(namespace).emit('allRoomsExposed', roomIds);
+    return roomIds;
   }
 
   switch (roomType) {
@@ -505,27 +507,26 @@ io.on('connection', (socket) => {
 
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
   socket.on('leaveRoom', function (data, ack) {
-    socket.leave(data.room);
+    socket.leave(data.room.room);
 
     // handled by Room.checkOut()
     // sending to individual socketid (private message)
-    io.to(data.room).emit('checkOut', {
+    io.to(data.room.room).emit('checkOut', {
       visitor: data.visitor,
       sentTime: data.sentTime,
       room: data.room,
       message: data.message,
     });
 
-    updateOccupancy(data.room);
+    updateOccupancy(data.room.room);
 
-    const x =
-      io.nsps['/'].adapter.rooms[data.room].sockets[
-        Object.keys(io.nsps[namespace].adapter.rooms[data.visitor].sockets)[0]
-      ];
-    const msg = `${data.visitor} ${x ? 'remains in' : 'left'} ${
-      data.room
-    } on ${getNow()} using socket ${socket.id}`;
-    console.log(warn('enterRoom():', msg));
+    const msg = `Using their own socket ${socket.id}, ${data.visitor.visitor} ${
+      roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
+        ? 'did not make it out of'
+        : 'made it out of'
+    } Room [${data.room.room} ${data.room.id}] on ${getNow()}`;
+
+    console.log(warn('leaveRoom():', msg));
     if (ack) {
       ack(msg);
     }
