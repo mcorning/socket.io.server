@@ -69,13 +69,15 @@ function peek(name) {
   console.log(name, str);
 }
 function openMyRoom(socket) {
-  const name = socket.handshake.query.visitor || socket.handshake.query.room;
+  const name =
+    socket.handshake.query.visitor ||
+    socket.handshake.query.room ||
+    socket.handshake.query.admin;
   console.groupCollapsed('openMyRoom: ');
   // it may be possible that a Visitor Room houses two different sockets with the same query.name (but different query.ids)
   // so always check for the correct id given the subject socket
   socket.join(name);
-  let x = new Map(Object.entries(getRooms(ROOM_TYPE.RAW)));
-  if (x.has(name)) {
+  if (roomIdsIncludeSocket(name, socket.id)) {
     console.log(
       success(`${name}'s socket ${socket.id} added to their own named Room`)
     );
@@ -91,16 +93,10 @@ function openMyRoom(socket) {
   } else {
     console.log('No pending warnings for', name);
   }
+  // using name means either a Room or a Visitor room will update its occupancy.
+  // where one name has more than one id, occupancy will update accordingly
+  updateOccupancy(name);
 
-  if (name.includes('.')) {
-    updateOccupancy();
-
-    // manual test of testing model
-    if (DEBUG) {
-      console.warn('TESTING ALERT. THIS IS ONLY A DRILL.');
-      socket.emit('exposureAlert', 'You may have been exposed to COVID-19');
-    }
-  }
   console.groupEnd();
 }
 
@@ -159,11 +155,13 @@ const roomIdsIncludeSocket = (roomName, id) => {
   return io.nsps[namespace].adapter.rooms[roomName].sockets[id];
 };
 
-const getAllSockets = () => {
+const getAllSocketQueries = () => {
   let allSockets = Object.entries(io.nsps[namespace].adapter.nsp.sockets).map(
     (v) => {
       let q = v[1].handshake.query;
-      if (q.visitor) {
+      if (q.admin) {
+        return { admin: q.admin, id: q.id, nsp: q.nsp };
+      } else if (q.visitor) {
         return { visitor: q.visitor, id: q.id, nsp: q.nsp };
       }
       return { room: q.room, id: q.id, nsp: q.nsp };
@@ -182,12 +180,6 @@ const getOccupiedRooms = () => {
   rooms = Object.entries(getAllRoomIds).filter(
     (v) => v[0].includes('.') && v[1].length > 1
   );
-};
-
-const getVisitorRooms = () => {
-  return Object.entries(io.nsps[namespace].adapter.nsp.sockets)
-    .map((v) => v[1].handshake.query)
-    .filter((v) => v.visitor && v.visitor != 'undefined');
 };
 
 const getRooms = (roomType) => {
@@ -220,10 +212,12 @@ const getRooms = (roomType) => {
       break;
 
     case ROOM_TYPE.AVAILABLE:
-      rooms = getAvailableRooms().map((v) => {
-        checkPendingRoomWarnings(v);
-        return { name: v.room, id: v.id, nsp: v.nsp };
-      });
+      // rooms = getAvailableRooms().map((v) => {
+      //   checkPendingRoomWarnings(v);
+      //   return { name: v.room, id: v.id, nsp: v.nsp };
+      // });
+      rooms = getAllSocketQueries().filter((v) => v.room);
+      rooms.forEach((room) => checkPendingRoomWarnings(room.room));
       console.log('Available Rooms:');
       console.table(rooms);
       // sending to all clients in namespace, including sender
@@ -240,9 +234,7 @@ const getRooms = (roomType) => {
       return rooms;
 
     case ROOM_TYPE.VISITOR:
-      rooms = getVisitorRooms().map((v) => {
-        return { name: v.visitor, id: v.id, nsp: v.nsp };
-      });
+      rooms = getAllSocketQueries().filter((v) => v.visitor);
       console.log('Visitors Rooms:');
       console.table(rooms);
       // sending to all clients in namespace 'myNamespace', including sender
@@ -304,13 +296,20 @@ const updateOccupancy = (room) => {
 //=============================================================================//
 // called when a connection changes
 io.on('connection', (socket) => {
-  if (socket.handshake.query.visitor || socket.handshake.query.room) {
+  let x = getAllSocketQueries();
+  if (
+    socket.handshake.query.admin ||
+    socket.handshake.query.visitor ||
+    socket.handshake.query.room
+  ) {
     console.log(' ');
     console.log(
       highlight(
         moment().format('HH:mm:ss'),
         'In connection handler: Opening connection to a Room for:',
-        socket.handshake.query.visitor || socket.handshake.query.room,
+        socket.handshake.query.admin ||
+          socket.handshake.query.visitor ||
+          socket.handshake.query.room,
         'using socketId:',
         socket.handshake.query.id
       )
@@ -532,11 +531,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Rooms
+  // Rooms send these events
   socket.on('openRoom', function (data, ack) {
     try {
       // ensure the Room has a room
-
       socket.room = data;
       console.log('\n', getNow(), 'socket.id opening:>> ', data, socket.id);
       socket.join(data);
@@ -588,7 +586,9 @@ io.on('connection', (socket) => {
     console.warn(
       getNow(),
       `Disconnecting Socket ${
-        socket.handshake.query.visitor || socket.handshake.query.room
+        socket.handshake.query.visitor ||
+        socket.handshake.query.room ||
+        socket.handshake.query.admin
       } (${socket.id}) `
     );
     console.warn('Reason:', reason);
