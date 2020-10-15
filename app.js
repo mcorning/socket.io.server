@@ -177,9 +177,7 @@ const getAvailableRooms = () => {
 };
 
 const getOccupiedRooms = () => {
-  rooms = Object.entries(getAllRoomIds).filter(
-    (v) => v[0].includes('.') && v[1].length > 1
-  );
+  rooms = Object.entries(getAllRoomIds).filter((v) => v[1].length > 1);
 };
 
 const getRooms = (roomType) => {
@@ -465,8 +463,8 @@ io.on('connection', (socket) => {
   // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', function (data, ack) {
     if (!getRooms(ROOM_TYPE.RAW)[data.visitor]) {
-      console.log(`${data.visitor.name}'s room is empty. Reopening now.`);
-      socket.join(data.visitor.name);
+      console.log(`${data.visitor.visitor}'s room is empty. Reopening now.`);
+      socket.join(data.visitor.visitor);
     }
 
     // socket.visitor = data.visitor;
@@ -480,11 +478,11 @@ io.on('connection', (socket) => {
       '-------------------------------------------------------------------'
     );
     peek(data.room.room);
-    peek(data.visitor.name);
+    peek(data.visitor.visitor);
     // handled by Room.checkIn()
     // sending to individual socketid (private message)
     io.to(data.room.room).emit('checkIn', {
-      visitor: data.visitor.name,
+      visitor: data.visitor.visitor,
       sentTime: data.sentTime,
       room: data.room.room,
       message: data.warnings,
@@ -493,7 +491,7 @@ io.on('connection', (socket) => {
 
     updateOccupancy(data.room.room);
 
-    const msg = `Using their own socket ${socket.id}, ${data.visitor.name} ${
+    const msg = `Using their own socket ${socket.id}, ${data.visitor.visitor} ${
       roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
         ? 'made it into'
         : 'did not make it into'
@@ -534,20 +532,20 @@ io.on('connection', (socket) => {
   // Rooms send these events
   socket.on('openRoom', function (data, ack) {
     try {
+      const { room, id, nsp } = data;
       // ensure the Room has a room
-      socket.room = data;
-      console.log('\n', getNow(), 'socket.id opening:>> ', data, socket.id);
-      socket.join(data);
-      peek(data);
+      console.log('\n', getNow(), 'socket.id opening:>> ', id, socket.id);
+      socket.join(room);
+      peek(room);
       let x =
-        io.nsps['/'].adapter.rooms[data].sockets[
-          Object.keys(io.nsps[namespace].adapter.rooms[data].sockets)[0]
+        io.nsps[namespace].adapter.rooms[room].sockets[
+          Object.keys(io.nsps[namespace].adapter.rooms[room].sockets)[0]
         ];
-      let msg = `${data} ${
+      let msg = `${room} ${
         x ? 'is' : 'is not'
       } open for visitors on ${getNow()} using socket ${socket.id}`;
       if (ack) {
-        ack({ name: data, msg: msg, id: socket.id });
+        ack({ name: room, msg: msg, id: socket.id });
       }
       getRooms(ROOM_TYPE.AVAILABLE);
     } catch (error) {
@@ -557,15 +555,17 @@ io.on('connection', (socket) => {
 
   socket.on('closeRoom', function (data, ack) {
     try {
-      console.log(`${socket.id} is leaving Room ${socket.room}`);
+      const { room, message, nsp } = data;
+
+      console.log(`${socket.id} is leaving Room ${socket.room} (${room})`);
       // leaveRoom(socket, socket.room);
       socket.leave(socket.room);
-      io.in(data.room).send(
-        `${data.room} is closed, so you should not see this message. Notify developers of error, please.`
+      io.in(room).send(
+        `${room} is closed, so you should not see this message. Notify developers of error, please.`
       );
       ack({
         message:
-          data.message == 'Closed'
+          message == 'Closed'
             ? `Well done, ${socket.room}. See you tomorrow?`
             : `Closed room ${socket.room}. You can add it back later.`,
         error: '',
