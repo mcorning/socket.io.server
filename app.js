@@ -105,6 +105,7 @@ const getNow = () => {
 };
 
 const checkPendingRoomWarnings = (room) => {
+  return 'checkPendingRoomWarnings is under construction due to query identities';
   console.log('In checkPendingRoomWarnings for', room);
   if (!pendingRoomWarnings.size) {
     return;
