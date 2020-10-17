@@ -88,8 +88,8 @@ function openMyRoom(socket) {
   // Check for pending warnings for this Visitor
   if (pendingVisitors.has(name)) {
     // sending to all clients in 'game' room except sender
-    console.log(warn('Emitting exposureAlert'));
-    socket.emit('exposureAlert', pendingVisitors.get(name));
+    console.log(warn('Emitting emitExposureAlert'));
+    socket.emit('emitExposureAlert', pendingVisitors.get(name));
   } else {
     console.log('No pending warnings for', name);
   }
@@ -333,7 +333,7 @@ io.on('connection', (socket) => {
       } else {
         console.info(message.visitor, 'alerted');
         // sending to visitor socket in visitor's room (except sender)
-        socket.to(message.visitor).emit('exposureAlert', message.message);
+        socket.to(message.visitor).emit('emitExposureAlert', message.message);
         ack(`Server: Alerted ${message.visitor}`);
       }
     } catch (error) {
@@ -346,7 +346,7 @@ io.on('connection', (socket) => {
   // Example message:
   // {
   //    sentTime:'2020-09-19T00:56:54.570Z',
-  //    visitor:'Nurse Jackie',
+  //    visitor:{visior:'Nurse Jackie', id:'FWzLl5dS9sr9FxDsAAAB', nsp:'enduringNet'}
   //    warnings:{
   //       Heathlands.Medical:[
   //         '2020-09-19T00:33:04.248Z', '2020-09-14T02:53:33.738Z', '2020-09-18T07:15:00.00Z'
@@ -357,7 +357,7 @@ io.on('connection', (socket) => {
   // When a Room comes online, we derefernce the Room name in checkPendingRoomWarnings() and send any waiting warnings.
   socket.on('exposureWarning', function (message, ack) {
     const { sentTime, visitor, warnings } = message;
-    console.log('exposureWarnings', JSON.stringify(message));
+    console.log('exposureWarnings', JSON.stringify(message, null, '\t'));
     console.table(message);
 
     let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
@@ -390,10 +390,12 @@ io.on('connection', (socket) => {
 
       return;
     }
+    // warnings is an object, one for each
     let exposed = new Set(Object.keys(warnings));
     console.log('exposed', [...exposed]);
 
     // now we separate the wheat from the chaff
+    // available-exposed=pending
     pendingRooms = difference(exposed, available);
     console.log('pendingRooms:', pendingRooms);
     // cache pending warnings
@@ -407,15 +409,13 @@ io.on('connection', (socket) => {
     //    }
     // };
     pendingRooms.forEach((room) => {
-      let x = {};
-      x[room] = warnings[room];
-      pendingRoomWarnings.set({
-        visitor: visitor,
-        warnings: x,
-        sentTime: sentTime,
-      });
+      pendingRoomWarnings.set(room, [
+        ...(pendingRoomWarnings.get(room) || []),
+        ...message.warnings[room],
+      ]);
     });
-    console.log('pendingRoomWarnings', [...pendingRoomWarnings]);
+    console.log('pendingRoomWarnings:');
+    console.table(pendingRoomWarnings);
 
     let alerted = intersection(exposed, available);
     // notify online Rooms
@@ -485,7 +485,7 @@ io.on('connection', (socket) => {
       visitor: data.visitor.visitor,
       sentTime: data.sentTime,
       room: data.room.room,
-      message: data.warnings,
+      message: 'Entered',
       socketId: socket.id,
     });
 
