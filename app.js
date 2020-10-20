@@ -4,6 +4,10 @@
 // require('colors');
 const clc = require('cli-color');
 const success = clc.red.green;
+const onExposureAlert = clc.green;
+const onExposureWarning = clc.yellow.red;
+// const onNotifyRoom = clc.green;
+// const onAlertVisitor = clc.yellow.red;
 const error = clc.red.bold;
 const warn = clc.yellow;
 const info = clc.cyan;
@@ -49,7 +53,44 @@ process.on('uncaughtException', (err) => {
 let namespace = '/';
 let pendingRoomWarnings = new Map();
 let pendingVisitors = new Map();
-let pendingRooms = new Set();
+let pendingRooms = {};
+const SOURCE = {
+  SERVER: 'server',
+  VISITOR: 'visitor',
+  ROOM: 'room',
+  ADMIN: 'admin',
+};
+
+// Event Heloers
+const privateMessage = (room, event, message) => {
+  // sending to individual socketid (private message)
+  // e.g.,
+  // io.to(room).emit(
+  //   'notifyRoom',
+  //   {
+  //     visitor: visitor,
+  //     exposureDates: exposureDates, // exposure dates array
+  //   }
+  // );
+  // note: cannot attach callback to namespace broadcast event
+  io.to(room).emit(event, message);
+};
+
+// end Event helpers
+// Main functions
+const warnRoom = (visitor, warning) => {
+  const room = warning[0],
+    message = { exposureDates: warning[1], room: room, visitor: visitor };
+  privateMessage(room.room, 'notifyRoom', message);
+};
+
+const cacheRoom = (warning) => {
+  const room = warning[0],
+    message = warning[1];
+  pendingRooms[room.id] = message;
+};
+
+// end Main Functions
 
 const ROOM_TYPE = {
   RAW: 0,
@@ -63,18 +104,16 @@ const ROOM_TYPE = {
 // multiplexing method can be called by Visitor or Room
 // uses the same socket to carry any Room or Visitor
 function peek(name) {
-  const json = io.nsps['/'].adapter.rooms[name].sockets;
+  const json = io.nsps[namespace].adapter.rooms[name].sockets;
 
   let str = warn('sockets:', JSON.stringify(json, null, '\t'));
   console.log(name, str);
 }
 function openMyRoom(socket) {
-  const name =
-    socket.handshake.query.visitor ||
-    socket.handshake.query.room ||
-    socket.handshake.query.admin;
+  const query = socket.handshake.query;
+  const name = query.visitor || query.room || query.admin;
   console.groupCollapsed('openMyRoom: ');
-  // it may be possible that a Visitor Room houses two different sockets with the same query.name (but different query.ids)
+  // it may be possible that a Visitor Room houses two different sockets with the same name (but different query.ids)
   // so always check for the correct id given the subject socket
   socket.join(name);
   if (roomIdsIncludeSocket(name, socket.id)) {
@@ -88,8 +127,10 @@ function openMyRoom(socket) {
   // Check for pending warning for this Visitor
   if (pendingVisitors.has(name)) {
     // sending to all clients in 'game' room except sender
-    console.log(warn('Emitting emitExposureAlert'));
-    socket.emit('emitExposureAlert', pendingVisitors.get(name));
+    console.log(
+      onExposureAlert(`${name.toUpperCase()} was PENDING. Now ALERTED.`)
+    );
+    socket.emit('exposureAlert', pendingVisitors.get(name));
   } else {
     console.log('No pending warning for', name);
   }
@@ -104,8 +145,8 @@ const getNow = () => {
   return moment().format('lll');
 };
 
-const checkPendingRoomWarnings = (room) => {
-  console.log('In checkPendingRoomWarnings for', room);
+const checkPendingRoomWarnings = (roomName) => {
+  console.log('In checkPendingRoomWarnings for', roomName);
   if (!pendingRoomWarnings.size) {
     return;
   }
@@ -113,7 +154,7 @@ const checkPendingRoomWarnings = (room) => {
   pendingRoomWarnings.forEach((value, key) => {
     console.group('Pending Warnings:');
     let msg = 'No pending warning';
-    if (Object.keys(key.warning).includes(room)) {
+    if (Object.keys(key.warning).includes(roomName)) {
       const message = {
         visitor: key.visitor,
         exposureDates: key.warning[room],
@@ -122,7 +163,8 @@ const checkPendingRoomWarnings = (room) => {
       msg = 'message in notifyRoom';
       DEBUG && console.table(message);
       // sending to individual socketid (private message)
-      io.to(room).emit('notifyRoom', message);
+      // io.to(room).emit('notifyRoom', message);
+      privateMessage(roomName, 'notifyRoom', message);
       pendingRoomWarnings.delete(key);
     }
     console.log(warn(msg));
@@ -152,7 +194,17 @@ const getAllRoomIds = () => {
   return io.nsps[namespace].adapter.rooms;
 };
 const roomIdsIncludeSocket = (roomName, id) => {
-  return io.nsps[namespace].adapter.rooms[roomName].sockets[id];
+  try {
+    return io.nsps[namespace].adapter.rooms[roomName].sockets[id];
+  } catch (error) {
+    console.error(error);
+    console.log('Returning false');
+    return false;
+  }
+};
+
+const roomIsOnline = (roomName) => {
+  return io.nsps[namespace].adapter.rooms[roomName];
 };
 
 const getAllSocketQueries = () => {
@@ -247,22 +299,21 @@ const getRooms = (roomType) => {
 };
 
 const getSockets = () => {
-  let allSockets = Object.entries(io.nsps['/'].adapter.nsp.sockets).reduce(
-    (a, c) => {
-      let query = c[1].handshake.query;
-      let b = {
-        id: c[0],
-        room: query.room,
-        visitor: query.visitor,
-        uniqueName: query.id,
-        namespace: query.nsp,
-        connected: c[1].connected,
-      };
-      a.push(b);
-      return a;
-    },
-    []
-  );
+  let allSockets = Object.entries(
+    io.nsps[namespace].adapter.nsp.sockets
+  ).reduce((a, c) => {
+    let query = c[1].handshake.query;
+    let b = {
+      id: c[0],
+      room: query.room,
+      visitor: query.visitor,
+      uniqueName: query.id,
+      namespace: query.nsp,
+      connected: c[1].connected,
+    };
+    a.push(b);
+    return a;
+  }, []);
   console.log('All Sockets:');
   console.table(allSockets);
 
@@ -294,29 +345,30 @@ const updateOccupancy = (room) => {
 //=============================================================================//
 // called when a connection changes
 io.on('connection', (socket) => {
+  // why this query?
   let x = getAllSocketQueries();
-  if (
-    socket.handshake.query.admin ||
-    socket.handshake.query.visitor ||
-    socket.handshake.query.room
-  ) {
+
+  // feedback
+  let query = socket.handshake.query;
+  if (query.admin || query.visitor || query.room) {
     console.log(' ');
     console.log(
       highlight(
         moment().format('HH:mm:ss'),
         'In connection handler: Opening connection to a Room for:',
-        socket.handshake.query.admin ||
-          socket.handshake.query.visitor ||
-          socket.handshake.query.room,
+        query.admin || query.visitor || query.room,
         'using socketId:',
-        socket.handshake.query.id
+        query.id
       )
     );
+    // end feedback
+
     openMyRoom(socket);
   }
 
   //Alerts
-  // sent from Room for each visitor (who warned each Room Visitor occupied)
+  // sent from Room for each visitor
+  // (each Visitor warned each Room the date(s) Visitor occupied the Room)
   socket.on('alertVisitor', function (message, ack) {
     // Visitor message includes the Room names to alert
     try {
@@ -324,17 +376,21 @@ io.on('connection', (socket) => {
       let online = Object.keys(getRooms(ROOM_TYPE.RAW)).filter(
         (v) => v === message.visitor
       );
-      if (online.length == 0) {
+      getRooms(ROOM_TYPE.AVAILABLE);
+      console.log(onExposureAlert(`Is ${message.visitor} in that list?`));
+      if (roomIsOnline(message.visitor)) {
+        console.log(onExposureAlert(message.visitor, 'is online and ALERTED'));
+        // sending to visitor socket in visitor's room (except sender)
+        socket.to(message.visitor).emit('exposureAlert', message.message);
+        ack(`Server: Alerted ${message.visitor}`);
+      } else {
         pendingVisitors.set(message.visitor, message.message);
-        console.log(new Date(), 'pendingVisitors:');
+        console.log(onExposureAlert(new Date(), 'pendingVisitors:'));
         console.log([...pendingVisitors]);
         io.of(namespace).emit('pendingVisitorsExposed', [...pendingVisitors]);
-        ack(`Server: ${message.visitor} unavailable. Deferred alert.`);
-      } else {
-        console.info(message.visitor, 'alerted');
-        // sending to visitor socket in visitor's room (except sender)
-        socket.to(message.visitor).emit('emitExposureAlert', message.message);
-        ack(`Server: Alerted ${message.visitor}`);
+        const msg = `Server: ${message.visitor} unavailable. DEFERRED ALERT.`;
+        console.log(onExposureAlert(msg));
+        ack(msg);
       }
     } catch (error) {
       console.error(error);
@@ -358,6 +414,20 @@ io.on('connection', (socket) => {
   // If a Room is not available (not online), we cache the warning.
   // When a Room comes online, we derefernce the Room name in checkPendingRoomWarnings() and send any waiting warning.
   socket.on('exposureWarning', function (message, ack) {
+    // server accepts all Room warnings from Visitor
+    // then sends each Room it set of warning dates using notifyRoom
+    message.warning.forEach((room) => {
+      if (roomIsOnline(room[0].room)) {
+        warnRoom(message.visitor.visitor, room);
+        console.log(onExposureWarning(`${room[0].room} WARNED`));
+      } else {
+        cacheRoom(room);
+        console.log(onExposureWarning(`${room[0].room} warning is PENDING`));
+      }
+    });
+  });
+
+  socket.on('exposureWarningX', function (message, ack) {
     const { sentTime, visitor, warning } = message;
     console.log('exposureWarning', JSON.stringify(message, null, '\t'));
     console.table(message);
@@ -434,15 +504,19 @@ io.on('connection', (socket) => {
       console.log('Warning Room:', room, 'with', exposureDates);
 
       // sending to individual socketid (private message)
-      io.to(room).emit(
-        'notifyRoom',
-        {
-          visitor: visitor,
-          exposureDates: exposureDates, // exposure dates array
-          room: room,
-        },
-        ack(`Server: ${room} notified`)
-      );
+      // io.to(room).emit(
+      //   'notifyRoom',
+      const message = {
+        visitor: visitor,
+        exposureDates: exposureDates, // exposure dates array
+        room: room,
+      };
+      //   ack(`Server: ${room} notified`)
+      // );
+      privateMessage(room, 'notifyRoom', message, {
+        source: SOURCE.Server,
+        message: `Notified ${room}`,
+      });
     });
   });
 
