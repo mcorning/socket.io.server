@@ -51,9 +51,8 @@ process.on('uncaughtException', (err) => {
 
 // globals
 let namespace = '/';
-let pendingRoomWarnings = new Map();
+let pendingWarnings = new Map();
 let pendingVisitors = new Map();
-let pendingRooms = {};
 const SOURCE = {
   SERVER: 'server',
   VISITOR: 'visitor',
@@ -84,10 +83,8 @@ const warnRoom = (visitor, warning) => {
   privateMessage(room.room, 'notifyRoom', message);
 };
 
-const cacheRoom = (warning) => {
-  const room = warning[0],
-    message = warning[1];
-  pendingRooms[room.id] = message;
+const cacheWarning = (warning) => {
+  pendingWarnings.set(warning[0].id, warning[1]);
 };
 
 // end Main Functions
@@ -145,29 +142,23 @@ const getNow = () => {
   return moment().format('lll');
 };
 
-const checkPendingRoomWarnings = (roomName) => {
-  console.log('In checkPendingRoomWarnings for', roomName);
-  if (!pendingRoomWarnings.size) {
+// look for pending warnings for specified Room
+const checkPendingRoomWarnings = (room) => {
+  console.log('In checkPendingRoomWarnings for', room.room);
+  if (!pendingWarnings.size || !pendingWarnings.has(room.id)) {
     return;
   }
-  // key is the message sent from the Visitor (stored as value)
-  pendingRoomWarnings.forEach((value, key) => {
+  pendingWarnings.forEach((value, key) => {
+    const message = {
+      visitor: '',
+      exposureDates: value,
+      room: key,
+    };
+    privateMessage(room.room, 'notifyRoom', message);
+    pendingWarnings.delete(key);
     console.group('Pending Warnings:');
-    let msg = 'No pending warning';
-    if (Object.keys(key.warning).includes(roomName)) {
-      const message = {
-        visitor: key.visitor,
-        exposureDates: key.warning[room],
-        room: room,
-      };
-      msg = 'message in notifyRoom';
-      DEBUG && console.table(message);
-      // sending to individual socketid (private message)
-      // io.to(room).emit('notifyRoom', message);
-      privateMessage(roomName, 'notifyRoom', message);
-      pendingRoomWarnings.delete(key);
-    }
-    console.log(warn(msg));
+
+    console.log(warn(JSON.stringify(message, null, 3)));
     console.groupEnd();
   });
 };
@@ -247,17 +238,16 @@ const getRooms = (roomType) => {
 
   switch (roomType) {
     case ROOM_TYPE.PENDING:
-      if (!pendingRooms.size) {
-        return [];
+      // if (!pendingRooms.size) {
+      //   return [];
+      // }
+      if (pendingWarnings.size) {
+        console.log('Pending Rooms:');
+        console.table([...pendingWarnings]);
+      } else {
+        console.log('No Rooms pending');
       }
-
-      console.log('pendingRooms:', [...pendingRooms.values()]);
-      console.log(
-        info(
-          `Emitting pendingRoomsExposed to all sockets in namespace ${namespace}`
-        )
-      );
-      io.of(namespace).emit('pendingRoomsExposed', [...pendingRooms.values()]);
+      io.of(namespace).emit('pendingRoomsExposed', [...pendingWarnings]);
 
       break;
 
@@ -267,9 +257,13 @@ const getRooms = (roomType) => {
       //   return { name: v.room, id: v.id, nsp: v.nsp };
       // });
       rooms = getAllSocketQueries().filter((v) => v.room);
-      rooms.forEach((room) => checkPendingRoomWarnings(room.room));
-      console.log('Available Rooms:');
-      console.table(rooms);
+      rooms.forEach((room) => checkPendingRoomWarnings(room));
+      if (rooms) {
+        console.log('Available Rooms:');
+        console.table(rooms);
+      } else {
+        console.log('No Rooms available');
+      }
       // sending to all clients in namespace, including sender
       io.of(namespace).emit('availableRoomsExposed', rooms);
       return rooms;
@@ -277,16 +271,23 @@ const getRooms = (roomType) => {
     case ROOM_TYPE.OCCUPIED:
       // do we see length in keys?
       rooms = Object.keys(getAllRoomIds).filter((v) => v[1].length > 1);
-      console.log('Occupied Rooms:');
-      console.table(rooms);
-      // sending to all clients in namespace 'myNamespace', including sender
+      if (rooms) {
+        console.log('Occupied Rooms:');
+        console.table(rooms);
+      } else {
+        console.log('No Rooms are occupied');
+      } // sending to all clients in namespace 'myNamespace', including sender
       io.of(namespace).emit('occupiedRoomsExposed', rooms);
       return rooms;
 
     case ROOM_TYPE.VISITOR:
       rooms = getAllSocketQueries().filter((v) => v.visitor);
-      console.log('Visitors Rooms:');
-      console.table(rooms);
+      if (rooms) {
+        console.log('Visitor Rooms:');
+        console.table(rooms);
+      } else {
+        console.log('No Visitor Rooms online');
+      }
       // sending to all clients in namespace 'myNamespace', including sender
       console.log(
         info(
@@ -345,11 +346,12 @@ const updateOccupancy = (room) => {
 //=============================================================================//
 // called when a connection changes
 io.on('connection', (socket) => {
-  // why this query?
-  let x = getAllSocketQueries();
-
   // feedback
   let query = socket.handshake.query;
+  if (query.room) {
+    checkPendingRoomWarnings(query);
+  }
+
   if (query.admin || query.visitor || query.room) {
     console.log(' ');
     console.log(
@@ -416,13 +418,19 @@ io.on('connection', (socket) => {
   socket.on('exposureWarning', function (message, ack) {
     // server accepts all Room warnings from Visitor
     // then sends each Room it set of warning dates using notifyRoom
-    message.warning.forEach((room) => {
-      if (roomIsOnline(room[0].room)) {
-        warnRoom(message.visitor.visitor, room);
-        console.log(onExposureWarning(`${room[0].room} WARNED`));
+    message.warning.forEach((warning) => {
+      if (roomIsOnline(warning[0].room)) {
+        warnRoom(message.visitor.visitor, warning);
+        console.log(onExposureWarning(`${warning[0].room} WARNED`));
+        if (ack) {
+          ack('exposureWarning WARNED Room');
+        }
       } else {
-        cacheRoom(room);
-        console.log(onExposureWarning(`${room[0].room} warning is PENDING`));
+        cacheWarning(warning);
+        console.log(onExposureWarning(`${warning[0].room} warning is PENDING`));
+        if (ack) {
+          ack(`exposureWarning warning is PENDING for ${warning[0].room}`);
+        }
       }
     });
   });
@@ -434,10 +442,10 @@ io.on('connection', (socket) => {
 
     let availableRooms = getRooms(ROOM_TYPE.AVAILABLE);
     if (!availableRooms.length) {
-      pendingRoomWarnings.set(message);
+      pendingWarnings.set(message);
 
-      console.table('Entire message contains pendingRoomWarnings', [
-        ...pendingRoomWarnings,
+      console.table('Entire message contains pendingWarnings', [
+        ...pendingWarnings,
       ]);
       let msg = `WARNING: No rooms online. Will warn ${message.warning.room.room} when they connect.`;
       ack(msg);
@@ -487,13 +495,13 @@ io.on('connection', (socket) => {
     //   },
     // };
     pendingRooms.forEach((room) => {
-      pendingRoomWarnings.set(room, [
-        ...(pendingRoomWarnings.get(room) || []),
+      pendingWarnings.set(room, [
+        ...(pendingWarnings.get(room) || []),
         ...message.warning[room],
       ]);
     });
-    console.log('pendingRoomWarnings:');
-    console.table(pendingRoomWarnings);
+    console.log('pendingWarnings:');
+    console.table(pendingWarnings);
 
     let alerted = intersection(exposed, available);
     // notify online Rooms
