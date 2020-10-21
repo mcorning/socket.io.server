@@ -77,14 +77,36 @@ const privateMessage = (room, event, message) => {
 
 // end Event helpers
 // Main functions
+
+/* warning example:
+{
+  room:'Heathlands.Medical',
+  id:'',
+  dates:[
+    '2020-09-19T00:33:04.248Z', '2020-09-14T02:53:33.738Z', '2020-09-18T07:15:00.00Z'
+  ]
+}
+  */
 const warnRoom = (visitor, warning) => {
-  const room = warning[0],
-    message = { exposureDates: warning[1], room: room, visitor: visitor };
-  privateMessage(room.room, 'notifyRoom', message);
+  message = {
+    exposureDates: warning.dates,
+    room: warning.room,
+    visitor: visitor,
+  };
+  privateMessage(warning.room, 'notifyRoom', message);
 };
 
+/* warning example:
+{
+  room:'Heathlands.Medical',
+  id:'',
+  dates:[
+    '2020-09-19T00:33:04.248Z', '2020-09-14T02:53:33.738Z', '2020-09-18T07:15:00.00Z'
+  ]
+}
+  */
 const cacheWarning = (warning) => {
-  pendingWarnings.set(warning[0].id, warning[1]);
+  pendingWarnings.set(warning.id, warning);
 };
 
 // end Main Functions
@@ -405,31 +427,32 @@ io.on('connection', (socket) => {
   // {
   //    sentTime:'2020-09-19T00:56:54.570Z',
   //    visitor:{visior:'Nurse Jackie', id:'FWzLl5dS9sr9FxDsAAAB', nsp:'enduringNet'}
-  //    warning:{
+  //    warnings:[{
   //       room:'Heathlands.Medical',
   //        id:'',
   //        dates:[
   //         '2020-09-19T00:33:04.248Z', '2020-09-14T02:53:33.738Z', '2020-09-18T07:15:00.00Z'
   //       ]
-  //    }
+  //    }]
   // };
   // If a Room is not available (not online), we cache the warning.
   // When a Room comes online, we derefernce the Room name in checkPendingRoomWarnings() and send any waiting warning.
   socket.on('exposureWarning', function (message, ack) {
     // server accepts all Room warnings from Visitor
     // then sends each Room it set of warning dates using notifyRoom
-    message.warning.forEach((warning) => {
-      if (roomIsOnline(warning[0].room)) {
+    message.warnings.forEach((warning) => {
+      const room = warning.room;
+      if (roomIsOnline(room)) {
         warnRoom(message.visitor.visitor, warning);
-        console.log(onExposureWarning(`${warning[0].room} WARNED`));
+        console.log(onExposureWarning(`${room} WARNED`));
         if (ack) {
           ack('exposureWarning WARNED Room');
         }
       } else {
         cacheWarning(warning);
-        console.log(onExposureWarning(`${warning[0].room} warning is PENDING`));
+        console.log(onExposureWarning(`${room} warning is PENDING`));
         if (ack) {
-          ack(`exposureWarning warning is PENDING for ${warning[0].room}`);
+          ack(`exposureWarning warning is PENDING for ${room}`);
         }
       }
     });
@@ -624,7 +647,7 @@ io.on('connection', (socket) => {
     try {
       const { room, id, nsp } = data;
       // ensure the Room has a room
-      console.log('\n', getNow(), 'socket.id opening:>> ', id, socket.id);
+      console.log('\n', getNow(), 'socket.id opening:>> ', id, 'for', room);
       socket.join(room);
       peek(room);
       let x =
