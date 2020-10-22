@@ -425,28 +425,38 @@ io.on('connection', (socket) => {
   // Visitor sends an exposure warning to each Room (with visited dates in an object parameter).
   // Example message:
   // {
-  //    sentTime:'2020-09-19T00:56:54.570Z',
-  //    visitor:{visior:'Nurse Jackie', id:'FWzLl5dS9sr9FxDsAAAB', nsp:'enduringNet'}
-  //    warnings:[{
-  //       room:'Heathlands.Medical',
-  //        id:'',
-  //        dates:[
-  //         '2020-09-19T00:33:04.248Z', '2020-09-14T02:53:33.738Z', '2020-09-18T07:15:00.00Z'
-  //       ]
-  //    }]
+  //    sentTime:'2020-09-22T07:56:54.570Z',
+  //    visitor:{visior:'AirGas Inc', id:'JgvrILSxDwXRWJUpAAAC', nsp:'enduringNet'}
+  //    warnings:[
+  //      {
+  //         room:'Heathlands.Medical',
+  //          id:'d6QoVa_JZxnM_0BoAAAA',
+  //          dates:[
+  //           '2020-09-19T00:33:04.248Z'
+  //          ]
+  //      },
+  //      {
+  //         room:'Heathlands Cafe',
+  //          id:'e1suC3Rdpj_1PuR3AAAB',
+  //          dates:[
+  //           '2020-09-19T01:00:04.248Z',
+  //           '2020-09-20T01:09:00.000Z'
+  //          ]
+  //      },
+  //    ]
   // };
   // If a Room is not available (not online), we cache the warning.
   // When a Room comes online, we derefernce the Room name in checkPendingRoomWarnings() and send any waiting warning.
   socket.on('exposureWarning', function (message, ack) {
     // server accepts all Room warnings from Visitor
-    // then sends each Room it set of warning dates using notifyRoom
+    // then sends each Room its set of warning dates using notifyRoom
     message.warnings.forEach((warning) => {
       const room = warning.room;
       if (roomIsOnline(room)) {
         warnRoom(message.visitor.visitor, warning);
         console.log(onExposureWarning(`${room} WARNED`));
         if (ack) {
-          ack('exposureWarning WARNED Room');
+          ack(`exposureWarning WARNED ${room}`);
         }
       } else {
         cacheWarning(warning);
