@@ -76,6 +76,7 @@ const privateMessage = (room, event, message) => {
 };
 
 // end Event helpers
+
 // Main functions
 
 /* warning example:
@@ -87,14 +88,6 @@ const privateMessage = (room, event, message) => {
   ]
 }
   */
-const warnRoom = (visitor, warning) => {
-  message = {
-    exposureDates: warning.dates,
-    room: warning.room,
-    visitor: visitor,
-  };
-  privateMessage(warning.room, 'notifyRoom', message);
-};
 
 /* warning example:
 {
@@ -105,9 +98,7 @@ const warnRoom = (visitor, warning) => {
   ]
 }
   */
-const cacheWarning = (warning) => {
-  pendingWarnings.set(warning.id, warning);
-};
+const cacheWarning = (warning) => {};
 
 // end Main Functions
 
@@ -218,6 +209,9 @@ const roomIdsIncludeSocket = (roomName, id) => {
 
 const roomIsOnline = (roomName) => {
   return io.nsps[namespace].adapter.rooms[roomName];
+};
+const socketIsOnline = (id) => {
+  return io.nsps[namespace].sockets[id];
 };
 
 const getAllSocketQueries = () => {
@@ -427,13 +421,14 @@ io.on('connection', (socket) => {
   // {
   //    sentTime:'2020-09-22T07:56:54.570Z',
   //    visitor:{visior:'AirGas Inc', id:'JgvrILSxDwXRWJUpAAAC', nsp:'enduringNet'}
-  //    warnings:[
+  //    warnings:
   //      {
+  //      'd6QoVa_JZxnM_0BoAAAA':{
   //         room:'Heathlands.Medical',
-  //          id:'d6QoVa_JZxnM_0BoAAAA',
   //          dates:[
   //           '2020-09-19T00:33:04.248Z'
   //          ]
+  //      }
   //      },
   //      {
   //         room:'Heathlands Cafe',
@@ -450,19 +445,27 @@ io.on('connection', (socket) => {
   socket.on('exposureWarning', function (message, ack) {
     // server accepts all Room warnings from Visitor
     // then sends each Room its set of warning dates using notifyRoom
-    message.warnings.forEach((warning) => {
-      const room = warning.room;
-      if (roomIsOnline(room)) {
-        warnRoom(message.visitor.visitor, warning);
-        console.log(onExposureWarning(`${room} WARNED`));
+    Object.entries(message.warnings).forEach((warning) => {
+      const id = warning[0];
+      message = {
+        exposureDates: warning[1].dates,
+        room: warning[1].room,
+        visitor: message.visitor,
+      };
+      // see if the namespace includes this Room ID
+      if (socketIsOnline(id)) {
+        privateMessage(id, 'notifyRoom', message);
+        console.log(onExposureWarning(`Socket ${id} WARNED`));
         if (ack) {
-          ack(`exposureWarning WARNED ${room}`);
+          ack(`Server: on exposureWarning: WARNED socket ${id}`);
         }
       } else {
-        cacheWarning(warning);
-        console.log(onExposureWarning(`${room} warning is PENDING`));
+        pendingWarnings.set(id, message);
+        console.log(onExposureWarning(`Warning on socket ${id} is PENDING`));
         if (ack) {
-          ack(`exposureWarning warning is PENDING for ${room}`);
+          ack(
+            `Server: on exposureWarning: warning is PENDING for socket ${warning.id}`
+          );
         }
       }
     });
