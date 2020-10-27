@@ -16,7 +16,7 @@
     "socket.io": "^1.7.3"
   },
   "scripts": {
-    "start": "node .",
-    "monitor": "nodemon ."
+    "start": "node server",
+    "monitor": "nodemon server"
   }
 }
