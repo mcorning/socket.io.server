@@ -110,24 +110,23 @@ class ServerProxy {
   }
 
   notifyRoom(data) {
-    const { visitor, warnings } = data;
+    const { visitor, warning } = data;
+
     let warnedRooms = [];
-    Object.entries(warnings).forEach((warning) => {
-      const id = warning[0];
-      let message = {
-        exposureDates: warning[1].dates,
-        room: warning[1].room,
-        visitor: visitor,
-      };
-      // see if the namespace includes this Room ID
-      if (this.socketIsOnline(id)) {
-        this.privateMessage(id, 'notifyRoom', message);
-        warnedRooms.push(`${message.room} WARNED.`);
-      } else {
-        this.pendingWarnings.set(id, data);
-        warnedRooms.push(`${message.room} PENDING.`);
-      }
-    });
+    const id = warning[0];
+    let message = {
+      exposureDates: warning[1].dates,
+      room: warning[1].room,
+      visitor: visitor,
+    };
+    // see if the namespace includes this Room ID
+    if (this.socketIsOnline(id)) {
+      this.privateMessage(id, 'notifyRoom', message);
+      warnedRooms.push(`${message.room} WARNED.`);
+    } else {
+      this.pendingWarnings.set(id, data);
+      warnedRooms.push(`${message.room} PENDING.`);
+    }
     return warnedRooms;
   }
 
@@ -156,8 +155,10 @@ class ServerProxy {
   handlePendings(query) {
     if (query.room || query.admin) {
       if (!this.pendingWarnings.size || !this.pendingWarnings.has(query.id)) {
-        console.log(`Nothing pending for ${query.room}`);
-        return;
+        let msg = `Nothing pending for ${query.room}`;
+        console.log(msg);
+
+        return msg;
       }
 
       this.pendingWarnings.forEach((value, key) => {
@@ -175,8 +176,10 @@ class ServerProxy {
       });
     } else if (query.visitor || query.admin) {
       if (!this.pendingWarnings.size || !this.pendingWarnings.has(query.id)) {
-        console.log(`Nothing pending for ${query.visitor}`);
-        return;
+        let msg = `Nothing pending for ${query.visitor}`;
+        console.log(msg);
+
+        return msg;
       }
 
       this.pendingWarnings.forEach((value, key) => {

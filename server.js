@@ -133,7 +133,7 @@ function feedback() {
 
 io.on('reconnect', (socket) => {
   // immediately reconnection
-  S.forwardPendingWarningsTo(socket.handshake.query);
+  S.handlePendings(socket.handshake.query);
   console.table(S.sockets);
 });
 
@@ -141,12 +141,13 @@ io.on('reconnect', (socket) => {
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
   // block undefined Rooms
-  if (query.room == 'undefined') {
+  if (!query.id || query.room == 'undefined') {
     socket.disconnect(true);
-    return;
+    console.error('corrupt socket disconnected:', socket.handshake.query);
   }
   // immediately upon connection: check for pending warnings and alerts
-  S.handlePendings(query);
+  let result = S.handlePendings(query);
+  query.result = result;
 
   //...........................................................................//
   //listeners
@@ -171,42 +172,6 @@ io.on('connection', (socket) => {
       console.error('Oops, onOpenRoom() hit this:', error.message);
     }
   };
-
-  // Visitor sends this event
-  const onEnterRoom = (data, ack) => {
-    try {
-      const { room, id, nsp, sentTime, visitor } = data;
-
-      // Enter the Room. As others enter, you will see a notification they, too, joined.
-      socket.join(room.room);
-
-      const assertion = S.roomIdsIncludeSocket(
-        room.room,
-        socket.handshake.query.id
-      );
-      console.assert(assertion, 'Could not enter Room');
-
-      // handled by Room.checkIn()
-      // sending to individual socketid (private message)
-      io.to(room.room).emit('checkIn', {
-        visitor: visitor,
-        sentTime: sentTime,
-        room: room,
-        message: 'Entered',
-        socketId: socket.id,
-      });
-
-      const o = S.getOccupancy(room.room);
-      console.log(warn(`${room.room} has ${o} occupants now.`));
-
-      if (ack) {
-        ack(assertion);
-      }
-    } catch (error) {
-      console.error('Oops, onEnterRoom() hit this:', error);
-    }
-  };
-
   // Room sends this event
   // Server forwards content to Visitor(s) with exposureAlert event
   const onAlertVisitor = (data, ack) => {
@@ -251,15 +216,55 @@ io.on('connection', (socket) => {
       console.error('onAlertVisitor sees:', error);
     }
   };
-
   // Visitor sends this event
+  const onEnterRoom = (data, ack) => {
+    try {
+      const { room, id, nsp, sentTime, visitor } = data;
+
+      // Enter the Room. As others enter, you will see a notification they, too, joined.
+      socket.join(room.room);
+
+      const assertion = S.roomIdsIncludeSocket(
+        room.room,
+        socket.handshake.query.id
+      );
+      console.assert(assertion, 'Could not enter Room');
+
+      // handled by Room.checkIn()
+      // sending to individual socketid (private message)
+      io.to(room.room).emit('checkIn', {
+        visitor: visitor,
+        sentTime: sentTime,
+        room: room,
+        message: 'Entered',
+        socketId: socket.id,
+      });
+
+      const o = S.getOccupancy(room.room);
+      console.log(warn(`${room.room} has ${o} occupants now.`));
+
+      if (ack) {
+        ack(assertion);
+      }
+    } catch (error) {
+      console.error('Oops, onEnterRoom() hit this:', error);
+    }
+  };
+
+  // Visitor sends this event containing all warnings for all exposed Rooms
   const onExposureWarning = (data, ack) => {
     try {
-      const result = S.notifyRoom(data);
+      const { visitor, warnings } = data;
+
+      let results = [];
+      // iterate collection notifying each Room separately
+      Object.entries(warnings).forEach((warning) => {
+        results.push(S.notifyRoom({ warning: warning, visitor: visitor }));
+      });
+
       if (ack) {
-        ack(result);
+        ack(results);
       }
-      //   });
     } catch (error) {
       console.error('onExposureWarning sees:', error);
     }
@@ -343,19 +348,19 @@ io.on('connection', (socket) => {
     S.rooms;
   });
   socket.on('exposeAllSockets', () => {
-    S.getSockets();
+    S.sockets();
   });
   socket.on('exposeOccupiedRooms', () => {
     S.occupied;
   });
   socket.on('exposePendingRooms', () => {
-    S.getRooms(ROOM_TYPE.PENDING);
+    S.pendingWarnings;
   });
   socket.on('exposeAvailableRooms', () => {
     S.available;
   });
   socket.on('exposeVisitorsRooms', () => {
-    S.getRooms(ROOM_TYPE.VISITOR);
+    S.visitors;
   });
 
   socket.on('pingServer', function (data, ack) {
