@@ -109,6 +109,22 @@ class ServerProxy {
     return this.occupied.filter((v) => v[0] == room).length;
   }
 
+  alertVisitor(data) {
+    const { message, visitor, id } = data;
+
+    // Ensure Visitor is online to see alert, otherwise cache and send when they login again
+    if (this.roomIsOnline(visitor)) {
+      // sending to visitor socket in visitor's room (except sender)
+      this.privateMessage(id, 'exposureAlert', message);
+      return `Server: Alerted ${visitor}`;
+    } else {
+      // cache the Visitor warning
+      this.pendingWarnings.set(id, data);
+
+      return `Server: ${visitor} unavailable. DEFERRED ALERT.`;
+    }
+  }
+
   notifyRoom(data) {
     const { visitor, warning } = data;
 
@@ -116,7 +132,8 @@ class ServerProxy {
     const id = warning[0];
     let message = {
       exposureDates: warning[1].dates,
-      room: warning[1].room,
+      // room: warning[1].room,
+      room: id,
       visitor: visitor,
     };
     // see if the namespace includes this Room ID
@@ -178,7 +195,6 @@ class ServerProxy {
       if (!this.pendingWarnings.size || !this.pendingWarnings.has(query.id)) {
         let msg = `Nothing pending for ${query.visitor}`;
         console.log(msg);
-
         return msg;
       }
 
@@ -357,7 +373,9 @@ class ServerProxy {
       return false;
     }
   }
-
+  roomIsOnline(roomName) {
+    return this.rooms[roomName];
+  }
   socketIsOnline(id) {
     return this.io.nsps[namespace].sockets[id];
   }

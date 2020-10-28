@@ -6,8 +6,6 @@ const clc = require('cli-color');
 const success = clc.red.green;
 const colorExposureAlert = clc.green;
 const colorExposureWarning = clc.yellow.red;
-// const onNotifyRoom = clc.green;
-// const onAlertVisitor = clc.yellow.red;
 const error = clc.red.bold;
 const warn = clc.yellow;
 const info = clc.cyan;
@@ -166,7 +164,7 @@ io.on('connection', (socket) => {
       console.assert(assertion, `${id} unable to join ${room}`);
 
       if (ack) {
-        ack(assertion);
+        ack({ event: 'onOpenRoom', room: room, result: assertion });
       }
     } catch (error) {
       console.error('Oops, onOpenRoom() hit this:', error.message);
@@ -174,12 +172,12 @@ io.on('connection', (socket) => {
   };
   // Room sends this event
   // Server forwards content to Visitor(s) with exposureAlert event
-  const onAlertVisitor = (data, ack) => {
+  function onAlertVisitor(data, ack) {
     // Visitor message includes the Room names to alert
     try {
-      const { message } = data;
+      const { message, visitor, id } = data;
 
-      if (!message || !message.visitor) {
+      if (!message || !visitor) {
         if (ack) {
           ack(
             new error(
@@ -192,30 +190,14 @@ io.on('connection', (socket) => {
         return;
       }
 
-      let result;
-      // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-      if (roomIsOnline(message.visitor)) {
-        // sending to visitor socket in visitor's room (except sender)
-        socket.to(message.visitor).emit('exposureAlert', message.message);
-
-        result = `Server: Alerted ${message.visitor}`;
-      } else {
-        // cache the warning
-        pendingVisitors.set(message.visitor, message.message);
-
-        // this may be an optional event. not sure what good it does anybody
-        // io.of(namespace).emit('pendingVisitorsExposed', [...S.pendingVisitors]);
-
-        // Room is the only one who really needs to know we took this path
-        result = `Server: ${message.visitor} unavailable. DEFERRED ALERT.`;
-      }
+      let result = S.alertVisitor(data);
       if (ack) {
         ack(result);
       }
     } catch (error) {
       console.error('onAlertVisitor sees:', error);
     }
-  };
+  }
   // Visitor sends this event
   const onEnterRoom = (data, ack) => {
     try {
@@ -244,7 +226,12 @@ io.on('connection', (socket) => {
       console.log(warn(`${room.room} has ${o} occupants now.`));
 
       if (ack) {
-        ack(assertion);
+        ack({
+          event: 'onEnterRoom',
+          room: room,
+          result: assertion,
+          emits: 'checkIn',
+        });
       }
     } catch (error) {
       console.error('Oops, onEnterRoom() hit this:', error);
@@ -263,7 +250,11 @@ io.on('connection', (socket) => {
       });
 
       if (ack) {
-        ack(results);
+        ack({
+          event: 'onExposureWarning',
+          result: results,
+          emit: 'notifyRoom',
+        });
       }
     } catch (error) {
       console.error('onExposureWarning sees:', error);
