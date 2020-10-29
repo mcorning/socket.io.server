@@ -101,6 +101,9 @@ class ServerProxy {
   get available() {
     return this.sockets.filter((v) => v.room);
   }
+  get visitors() {
+    return this.sockets.filter((v) => v.visitor);
+  }
 
   getOccupancy(room) {
     if (!room) {
@@ -113,7 +116,7 @@ class ServerProxy {
     const { message, visitor, id } = data;
 
     // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-    if (this.roomIsOnline(visitor)) {
+    if (this.roomIsOnline(id)) {
       // sending to visitor socket in visitor's room (except sender)
       this.privateMessage(id, 'exposureAlert', message);
       return `Server: Alerted ${visitor}`;

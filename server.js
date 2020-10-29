@@ -242,7 +242,7 @@ io.on('connection', (socket) => {
   const onExposureWarning = (data, ack) => {
     try {
       const { visitor, warnings } = data;
-
+      console.table(data);
       let results = [];
       // iterate collection notifying each Room separately
       Object.entries(warnings).forEach((warning) => {
@@ -335,23 +335,35 @@ io.on('connection', (socket) => {
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
   // Admin events (for Room managers use)
-  socket.on('exposeAllRooms', () => {
-    S.rooms;
+  socket.on('exposeAllRooms', (data, ack) => {
+    if (ack) {
+      ack(S.rooms);
+    }
   });
-  socket.on('exposeAllSockets', () => {
-    S.sockets();
+  socket.on('exposeAllSockets', (data, ack) => {
+    if (ack) {
+      ack(S.sockets);
+    }
   });
-  socket.on('exposeOccupiedRooms', () => {
-    S.occupied;
+  socket.on('exposeOccupiedRooms', (data, ack) => {
+    if (ack) {
+      ack(S.occupied);
+    }
   });
-  socket.on('exposePendingRooms', () => {
-    S.pendingWarnings;
+  socket.on('exposePendingWarnings', (data, ack) => {
+    if (ack) {
+      ack(S.pendingWarnings);
+    }
   });
-  socket.on('exposeAvailableRooms', () => {
-    S.available;
+  socket.on('exposeAvailableRooms', (data, ack) => {
+    if (ack) {
+      ack(S.available);
+    }
   });
-  socket.on('exposeVisitorsRooms', () => {
-    S.visitors;
+  socket.on('exposeVisitorsRooms', (data, ack) => {
+    if (ack) {
+      ack(S.visitors);
+    }
   });
 
   socket.on('pingServer', function (data, ack) {
