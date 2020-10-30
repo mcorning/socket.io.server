@@ -141,10 +141,7 @@ io.on('reconnect', (socket) => {
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
   // block undefined Rooms
-  // if (!query.id || query.room == 'undefined') {
-  //   socket.disconnect(true);
-  //   console.error('corrupt socket disconnected:', socket.handshake.query);
-  // }
+
   // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
     let result = S.handlePendings(query);
@@ -152,6 +149,9 @@ io.on('connection', (socket) => {
     console.group(`[${getNow()}] All Sockets`);
     console.log(S.sockets);
     console.groupEnd();
+  } else {
+    console.error('socket lacks ID:', socket.handshake.query);
+    socket.disconnect();
   }
   //...........................................................................//
   //listeners
