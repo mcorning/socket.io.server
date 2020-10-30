@@ -13,7 +13,7 @@ let namespace = '/';
 let pendingVisitors = new Map();
 
 const getNow = () => {
-  return moment().format('lll');
+  return moment().format('HH:mm:ss');
 };
 
 function printJson(json) {

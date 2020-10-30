@@ -131,22 +131,28 @@ function feedback() {
 
 io.on('reconnect', (socket) => {
   // immediately reconnection
-  S.handlePendings(socket.handshake.query);
-  console.table(S.sockets);
+  if (socket.handshake.query.id) {
+    S.handlePendings(socket.handshake.query);
+    console.table(S.sockets);
+  }
 });
 
 // called when a connection changes
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
   // block undefined Rooms
-  if (!query.id || query.room == 'undefined') {
-    socket.disconnect(true);
-    console.error('corrupt socket disconnected:', socket.handshake.query);
-  }
+  // if (!query.id || query.room == 'undefined') {
+  //   socket.disconnect(true);
+  //   console.error('corrupt socket disconnected:', socket.handshake.query);
+  // }
   // immediately upon connection: check for pending warnings and alerts
-  let result = S.handlePendings(query);
-  query.result = result;
-
+  if (query.id) {
+    let result = S.handlePendings(query);
+    query.result = result;
+    console.group(`[${getNow()}] All Sockets`);
+    console.log(S.sockets);
+    console.groupEnd();
+  }
   //...........................................................................//
   //listeners
 
