@@ -149,6 +149,7 @@ io.on('connection', (socket) => {
     console.group(`[${getNow()}] All Sockets`);
     console.log(S.sockets);
     console.groupEnd();
+    S.exposeAvailableRooms();
   } else {
     console.error('socket lacks ID:', socket.handshake.query);
     socket.disconnect();
@@ -373,7 +374,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('pingServer', function (data, ack) {
-    ack(`Server is at your disposal, ${data}`);
+    if (ack) ack(`Server is at your disposal, ${data}`);
   });
 
   socket.on('disconnected', () => {
