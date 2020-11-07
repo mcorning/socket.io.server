@@ -105,6 +105,12 @@ class ServerProxy {
     return this.sockets.filter((v) => v.visitor);
   }
 
+  getOpenRooms() {
+    let a = this.available;
+    let o = this.rooms;
+    return a.filter((v) => o[v.room]);
+  }
+
   getOccupancy(room) {
     if (!room) {
       throw 'No room name specified';
@@ -249,8 +255,8 @@ class ServerProxy {
     return this.io.nsps[namespace].sockets[id];
   }
 
-  exposeRoomSockets() {
-    this.io.of(namespace).emit('availableRoomSocketsExposed', this.rooms);
+  exposeOpenRooms() {
+    this.io.of(namespace).emit('openRoomsExposed', this.getOpenRooms());
   }
   exposeAvailableRooms() {
     this.io.of(namespace).emit('availableRoomsExposed', this.available);

@@ -144,12 +144,17 @@ io.on('connection', (socket) => {
 
   // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
+    console.groupCollapsed('onConnection:');
+    console.log(`client: ${query.visitor || query.room || query.admin}`);
     let result = S.handlePendings(query);
     query.result = result;
-    console.group(`[${getNow()}] All Sockets`);
-    console.log(S.sockets);
+    console.group(`[${getNow()}] All Sockets and Available Rooms`);
+    console.log('sockets:', S.sockets);
+    console.log('available:', S.available);
+    console.log('rooms:', S.rooms);
     console.groupEnd();
-    S.exposeAvailableRooms();
+    console.groupEnd();
+    S.exposeOpenRooms();
   } else {
     console.error('socket lacks ID:', socket.handshake.query);
     socket.disconnect();
@@ -159,13 +164,22 @@ io.on('connection', (socket) => {
 
   // called by State Machine to bring a Room online
   // so that Visitors can enter
-  // this can change the state of io..rooms
+  // this can change the state of io...rooms
   // next step in the pipeline is to access pending Visitor exposure warnings
   const onOpenRoom = (data, ack) => {
     try {
+      let rooms = S.getOpenRooms();
+      console.table(rooms);
       const { room, id, nsp } = data;
-
+      console.groupCollapsed('onOpenRoom');
+      console.log(`Rooms before ${room} opens`);
+      console.table(S.rooms);
       socket.join(room);
+      console.log(`Rooms after ${room} opens`);
+      console.table(S.rooms);
+      console.groupEnd();
+      S.exposeOpenRooms();
+      // if this checks for connection, why not check Room connected property?
       const assertion = S.roomIdsIncludeSocket(room, id);
 
       console.assert(assertion, `${id} unable to join ${room}`);
@@ -210,17 +224,30 @@ io.on('connection', (socket) => {
     try {
       const { room, id, nsp, sentTime, visitor } = data;
 
+      // first, ensure the Room is open (note S.rooms returns an object
+      // that will include the name of an Open Room after a Room opens its own
+      // io room):
+      if (!S.rooms[room.room]) {
+        if (ack) {
+          ack({
+            error: 'Room must be open before you can enter',
+            on: 'server.onEnterRoom',
+          });
+        }
+      }
+
       // Enter the Room. As others enter, you will see a notification they, too, joined.
       socket.join(room.room);
 
-      const assertion = S.roomIdsIncludeSocket(
-        room.room,
-        socket.handshake.query.id
-      );
-      console.assert(assertion, 'Could not enter Room');
+      //S.roomIdsIncludeSocket essentially calls:
+      //const result = io.nsps['/'].adapter.rooms
+      // && io.nsps['/'].adapter.rooms[room.room].sockets[socket.id];
+      const assertion = S.roomIdsIncludeSocket(room.room, socket.id);
+      console.assert(assertion, 'Could not enter Room', room.room);
 
       // handled by Room.checkIn()
       // sending to individual socketid (private message)
+      // this emit assumes the room.room is open (and not merely connected)
       io.to(room.room).emit('checkIn', {
         visitor: visitor,
         sentTime: sentTime,
@@ -229,16 +256,26 @@ io.on('connection', (socket) => {
         socketId: socket.id,
       });
 
-      const o = S.getOccupancy(room.room);
-      console.log(warn(`${room.room} has ${o} occupants now.`));
-
-      if (ack) {
-        ack({
-          event: 'onEnterRoom',
-          room: room,
-          result: assertion,
-          emits: 'checkIn',
-        });
+      const occupants = S.getOccupancy(room.room);
+      console.log(warn(`${room.room} has ${occupants} occupants now.`));
+      if (occupants) {
+        if (ack) {
+          ack({
+            event: 'onEnterRoom',
+            room: room,
+            result: assertion,
+            emits: 'checkIn',
+          });
+        }
+      } else {
+        if (ack) {
+          ack({
+            event: 'onEnterRoom',
+            room: room,
+            result: `Could not enter Room ${room.room}`,
+            emits: 'nothing',
+          });
+        }
       }
     } catch (error) {
       console.error('Oops, onEnterRoom() hit this:', error);
@@ -280,7 +317,7 @@ io.on('connection', (socket) => {
       message: data.message,
     });
 
-    updateOccupancy(data.room.room);
+    R.updateOccupancy(data.room.room);
 
     const msg = `Using their own socket ${socket.id}, ${data.visitor.visitor} ${
       roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
@@ -296,23 +333,23 @@ io.on('connection', (socket) => {
 
   const onCloseRoom = function (data, ack) {
     try {
-      const { room, message, nsp } = data;
+      const { room, id, nsp } = data;
+      console.groupCollapsed('onCloseRoom');
+      console.log(`Rooms before ${room} closing`);
+      console.table(S.rooms);
+      socket.leave(room);
+      console.log(`Rooms after ${room} closing`);
+      console.table(S.rooms);
+      console.groupEnd();
 
-      console.log(`${socket.id} is leaving Room ${socket.room} (${room})`);
-      // leaveRoom(socket, socket.room);
-      socket.leave(socket.room);
-      io.in(room).send(
-        `${room} is closed, so you should not see this message. Notify developers of error, please.`
-      );
-      ack({
-        message:
-          message == 'Closed'
-            ? `Well done, ${socket.room}. See you tomorrow?`
-            : `Closed room ${socket.room}. You can add it back later.`,
-        error: '',
-      });
+      // if this checks for connection, why not check Room connected property?
+      const assertion = !S.roomIdsIncludeSocket(room, id);
 
-      getRooms(ROOM_TYPE.AVAILABLE);
+      console.assert(assertion, `${id} unable to leave ${room}`);
+
+      if (ack) {
+        ack({ event: 'onCloseRoom', room: room, result: assertion });
+      }
     } catch (error) {
       console.error('Oops, closeRoom() hit this:', error.message);
     }
@@ -334,27 +371,23 @@ io.on('connection', (socket) => {
   // {visitor:{name, id, nsp}, room:{room, id, nsp}, message:{}, sentTime: dateTime}
   // disambiguate enterRoom event from the event handler in the Room, checkIn
   socket.on('enterRoom', onEnterRoom);
+  // disambiguate leaveRoom event from the event handler in the Room, checkOut
   socket.on('leaveRoom', onLeaveRoom);
   socket.on('exposureWarning', onExposureWarning);
-  // disambiguate leaveRoom event from the event handler in the Room, checkOut
 
   // end Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
   // Admin events (for Room managers use)
-  socket.on('exposeAllRooms', (data, ack) => {
-    if (ack) {
-      ack(S.rooms);
-    }
-  });
+
   socket.on('exposeAllSockets', (data, ack) => {
     if (ack) {
       ack(S.sockets);
     }
   });
-  socket.on('exposeOccupiedRooms', (data, ack) => {
+  socket.on('exposeOpenRooms', (data, ack) => {
     if (ack) {
-      ack(S.occupied);
+      ack(S.rooms);
     }
   });
   socket.on('exposePendingWarnings', (data, ack) => {
