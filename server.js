@@ -288,6 +288,9 @@ io.on('connection', (socket) => {
       const { visitor, warnings } = data;
       console.table(data);
       let results = [];
+
+      console.log('rooms:', S.rooms);
+
       // iterate collection notifying each Room separately
       Object.entries(warnings).forEach((warning) => {
         results.push(S.notifyRoom({ warning: warning, visitor: visitor }));
@@ -317,10 +320,10 @@ io.on('connection', (socket) => {
       message: data.message,
     });
 
-    R.updateOccupancy(data.room.room);
+    S.updateOccupancy(data.room.room);
 
     const msg = `Using their own socket ${socket.id}, ${data.visitor.visitor} ${
-      roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
+      S.roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
         ? 'did not make it out of'
         : 'made it out of'
     } Room [${data.room.room} ${data.room.id}] on ${getNow()}`;

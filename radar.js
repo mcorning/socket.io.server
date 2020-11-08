@@ -138,19 +138,18 @@ class ServerProxy {
     const { visitor, warning } = data;
 
     let warnedRooms = [];
-    const id = warning[0];
+    const roomName = warning[0];
     let message = {
       exposureDates: warning[1].dates,
-      // room: warning[1].room,
-      room: id,
+      room: roomName,
       visitor: visitor,
     };
     // see if the namespace includes this Room ID
-    if (this.socketIsOnline(id)) {
-      this.privateMessage(id, 'notifyRoom', message);
+    if (this.rooms[roomName]) {
+      this.privateMessage(roomName, 'notifyRoom', message);
       warnedRooms.push(`${message.room} WARNED.`);
     } else {
-      this.pendingWarnings.set(id, data);
+      this.pendingWarnings.set(roomName, data);
       warnedRooms.push(`${message.room} PENDING.`);
     }
     return warnedRooms;
@@ -235,6 +234,7 @@ class ServerProxy {
     //   }
     // );
     // note: cannot attach callback to namespace broadcast event
+    console.info(`Emitting ${event} to ${room}`);
     this.io.to(room).emit(event, message);
   }
 
@@ -248,8 +248,12 @@ class ServerProxy {
       return false;
     }
   }
-  roomIsOnline(roomName) {
-    return this.rooms[roomName];
+  // use id if Visitors don't have rooms with their names on them
+  // as is the case 11.7.2020
+  roomIsOnline(id) {
+    // this only works for Rooms (unless we give Visitors rooms by the name)
+    // return this.rooms[roomName];
+    return this.sockets.filter((v) => v.id == id);
   }
   socketIsOnline(id) {
     return this.io.nsps[namespace].sockets[id];
