@@ -31,7 +31,7 @@ io.engine.generateId = (req) => {
   }
   return base64id.generateId();
 };
-const { getNow, logResults, ServerProxy } = require('./radar');
+const { getNow, printJson, logResults, ServerProxy } = require('./radar');
 const S = new ServerProxy(io);
 
 const moment = require('moment');
@@ -144,14 +144,15 @@ io.on('connection', (socket) => {
 
   // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
-    console.groupCollapsed('onConnection:');
+    console.groupCollapsed(`[${getNow()}] onConnection:`);
     console.log(`client: ${query.visitor || query.room || query.admin}`);
     let result = S.handlePendings(query);
     query.result = result;
-    console.group(`[${getNow()}] All Sockets and Available Rooms`);
+    console.group(`All Sockets and Available Rooms`);
     console.log('sockets:', S.sockets);
     console.log('available:', S.available);
     console.log('rooms:', S.rooms);
+    console.log('visitors:', S.visitors);
     console.groupEnd();
     console.groupEnd();
     S.exposeOpenRooms();
@@ -168,15 +169,13 @@ io.on('connection', (socket) => {
   // next step in the pipeline is to access pending Visitor exposure warnings
   const onOpenRoom = (data, ack) => {
     try {
-      let rooms = S.getOpenRooms();
-      console.table(rooms);
       const { room, id, nsp } = data;
       console.groupCollapsed('onOpenRoom');
-      console.log(`Rooms before ${room} opens`);
-      console.table(S.rooms);
+      console.log(`Open Rooms before ${room} opens...`);
+      console.table(S.getOpenRooms());
       socket.join(room);
-      console.log(`Rooms after ${room} opens`);
-      console.table(S.rooms);
+      console.log(`...and after ${room} opens`);
+      console.table(S.getOpenRooms());
       console.groupEnd();
       S.exposeOpenRooms();
       // if this checks for connection, why not check Room connected property?
@@ -223,7 +222,7 @@ io.on('connection', (socket) => {
   const onEnterRoom = (data, ack) => {
     try {
       const { room, id, nsp, sentTime, visitor } = data;
-
+      console.group(`[${getNow()}] onEnterRoom`);
       // first, ensure the Room is open (note S.rooms returns an object
       // that will include the name of an Open Room after a Room opens its own
       // io room):
@@ -257,12 +256,14 @@ io.on('connection', (socket) => {
       });
 
       const occupants = S.getOccupancy(room.room);
-      console.log(warn(`${room.room} has ${occupants} occupants now.`));
+      console.log(warn(`${room.room} has ${occupants} occupants now:`));
+      console.log(printJson(S.rooms[room.room]));
       if (occupants) {
         if (ack) {
           ack({
             event: 'onEnterRoom',
             room: room,
+            occupants: occupants,
             result: assertion,
             emits: 'checkIn',
           });
@@ -277,6 +278,7 @@ io.on('connection', (socket) => {
           });
         }
       }
+      console.groupEnd();
     } catch (error) {
       console.error('Oops, onEnterRoom() hit this:', error);
     }

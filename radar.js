@@ -95,9 +95,7 @@ class ServerProxy {
   get rooms() {
     return this.io.nsps[namespace].adapter.rooms;
   }
-  get occupied() {
-    return Object.entries(this.rooms).filter((v) => v[1].length > 1);
-  }
+
   get available() {
     return this.sockets.filter((v) => v.room);
   }
@@ -115,7 +113,7 @@ class ServerProxy {
     if (!room) {
       throw 'No room name specified';
     }
-    return this.occupied.filter((v) => v[0] == room).length;
+    return this.rooms[room].length;
   }
 
   alertVisitor(data) {
@@ -285,6 +283,7 @@ class ServerProxy {
 module.exports = {
   getNow,
   logResults,
+  printJson,
   ServerProxy,
 };
 
