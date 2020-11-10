@@ -119,16 +119,16 @@ class ServerProxy {
   }
 
   alertVisitor(data) {
-    const { message, visitor, id } = data;
+    const { message, visitor, visitorId } = data;
 
     // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-    if (this.roomIsOnline(id)) {
+    if (this.roomIsOnline(visitorId)) {
       // sending to visitor socket in visitor's room (except sender)
-      this.privateMessage(id, 'exposureAlert', message);
+      this.privateMessage(visitorId, 'exposureAlert', message);
       return `Server: Alerted ${visitor}`;
     } else {
       // cache the Visitor warning
-      this.pendingWarnings.set(id, data);
+      this.pendingWarnings.set(visitorId, data);
 
       return `Server: ${visitor} unavailable. DEFERRED ALERT.`;
     }
@@ -260,7 +260,9 @@ class ServerProxy {
   }
 
   exposeOpenRooms() {
-    this.io.of(namespace).emit('openRoomsExposed', this.getOpenRooms());
+    const openRooms = this.getOpenRooms();
+    this.io.of(namespace).emit('openRoomsExposed', openRooms);
+    return openRooms;
   }
   exposeAvailableRooms() {
     this.io.of(namespace).emit('availableRoomsExposed', this.available);

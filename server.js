@@ -390,7 +390,7 @@ io.on('connection', (socket) => {
   });
   socket.on('exposeOpenRooms', (data, ack) => {
     if (ack) {
-      ack(S.rooms);
+      ack(S.exposeOpenRooms());
     }
   });
   socket.on('exposePendingWarnings', (data, ack) => {
