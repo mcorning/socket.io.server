@@ -1,48 +1,12 @@
 // jshint esversion: 6
 
 // express code
-// require('colors');
-const clc = require('cli-color');
-const success = clc.red.green;
-const colorExposureAlert = clc.green;
-const colorExposureWarning = clc.yellow.red;
-const error = clc.red.bold;
-const warn = clc.yellow;
-const info = clc.cyan;
-const notice = clc.blue;
-const highlight = clc.magenta;
-const bold = clc.bold;
 
 const express = require('express');
 const app = express();
 
 const http = require('http').Server(app);
 
-// setup Socket.io Server and Proxy
-const port = process.env.PORT || 3003;
-const io = require('socket.io')(http);
-io.engine.generateId = (req) => {
-  const parsedUrl = new url.parse(req.url);
-  const params = new URLSearchParams(parsedUrl.search);
-  const prevId = params.get('id');
-  // prevId is either a valid id or an empty string
-  if (prevId) {
-    return prevId;
-  }
-  return base64id.generateId();
-};
-const { getNow, printJson, logResults, ServerProxy } = require('./radar');
-const S = new ServerProxy(io);
-
-const moment = require('moment');
-const DEBUG = 0;
-
-const url = require('url');
-const base64id = require('base64id');
-
-const { SOURCE, ROOM_TYPE } = require('./types');
-
-// express code
 app.use(express.static(__dirname));
 
 app.get('/', function (req, res) {
@@ -54,76 +18,113 @@ process.on('uncaughtException', (err) => {
 });
 // end express code
 
+// setup Socket.io Server and Proxy
+const url = require('url');
+const base64id = require('base64id');
+const port = process.env.PORT || 3003;
+const io = require('socket.io')(http);
+// overload to use passed in ID as socket.id
+io.engine.generateId = (req) => {
+  const parsedUrl = new url.parse(req.url);
+  const params = new URLSearchParams(parsedUrl.search);
+  const prevId = params.get('id');
+  // prevId is either a valid id or an empty string
+  if (prevId) {
+    return prevId;
+  }
+  return base64id.generateId();
+};
+
+// set up Server Proxy
+const { getNow, printJson, logResults, ServerProxy } = require('./radar');
+let pendingWarnings = new Map();
+const S = new ServerProxy(io, pendingWarnings);
+
+// other utilities
+const clc = require('cli-color');
+const success = clc.red.green;
+const colorExposureAlert = clc.green;
+const colorExposureWarning = clc.yellow.red;
+const error = clc.red.bold;
+const warn = clc.yellow;
+const info = clc.cyan;
+const notice = clc.blue;
+const highlight = clc.magenta;
+const bold = clc.bold;
+
+const moment = require('moment');
+const DEBUG = 0;
+
+const { SOURCE, ROOM_TYPE } = require('./types');
+
 // helpers
-let logLevel = 0;
-function format(text = '', level = logLevel, type = 'output') {
-  return { level: level, text: text, type: type };
+
+function onConnection(query) {
+  console.groupCollapsed(
+    `[${getNow()}] EVENT: onConnection [${
+      query.visitor || query.room || query.admin
+    }]`
+  );
+
+  let result = handlePendings(query);
+
+  query.result = result;
+  console.group(`All Sockets and Available Rooms`);
+  console.log('Sockets:', printJson(S.sockets));
+  console.log('Available Rooms:', printJson(S.available));
+  console.log('Rooms:', printJson(S.rooms));
+  console.log('Open Rooms:', printJson(S.openRooms));
+  console.log('Visitors:', printJson(S.visitors));
+  console.log('Pending Warnings:', printJson([...pendingWarnings]));
+  console.groupEnd();
+  console.groupEnd();
+  S.exposeOpenRooms();
 }
 
-function feedback() {
-  function onOpenRoom() {
-    logResults.entitle(`Open ${room}`, false);
-    // ensure the Room has a room
-    logResults.add(format(`${id} joins ${room}`));
-
-    logLevel && S.peek(room);
-
-    logLevel && S.getRooms(ROOM_TYPE.AVAILABLE);
-    let msg = `${room} ${
-      S.socketIsOnline(id) ? 'is' : 'is not'
-    } open for visitors on ${getNow()} using socket ${socket.id}`;
-
-    logResults.add(format(msg));
-    logResults.show();
-  }
-
-  function onEnterRoom() {
-    if (!S.getRooms(ROOM_TYPE.RAW)[data.visitor]) {
-      console.log(`${data.visitor.visitor}'s room is empty. Reopening now.`);
-      socket.join(data.visitor.visitor);
+function handlePendings(query) {
+  if (query.room) {
+    if (!pendingWarnings.has(query.room)) {
+      let msg = `Nothing pending for ${query.room}`;
+      console.log(msg);
+      return msg;
     }
 
-    console.log('After entering room, all occupied rooms:');
-    console.log(
-      '-------------------------------------------------------------------'
-    );
-    S.peek(data.room.room);
-    S.peek(data.visitor.visitor);
+    pendingWarnings.forEach((value, key) => {
+      const message = {
+        visitor: '',
+        exposureDates: value.warnings[key].dates,
+        room: key,
+      };
+      S.privateMessage(query.room, 'notifyRoom', message);
+      pendingWarnings.delete(key);
+      console.groupCollapsed(`Pending Warnings for ${query.room}:`);
 
-    const msg = `Using their own socket ${socket.id}, ${data.visitor.visitor} ${
-      S.roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
-        ? 'made it into'
-        : 'did not make it into'
-    } Room [${data.room.room} ${data.room.id}] on ${getNow()}`;
-    console.log(warn('Inside enterRoom():', msg));
-  }
-
-  function onAlertVisitor() {
-    console.log(warn('ALERT!'));
-    console.group(`Processing ALERT for ${message.visitor}`);
-
-    console.log(onExposureAlert(message.visitor, 'is online and ALERTED'));
-
-    console.log(onExposureAlert(new Date(), 'pendingVisitors:'));
-    console.log([...S.pendingVisitors]);
-
-    console.log(onExposureAlert(msg));
-    console.groupEnd();
-  }
-
-  function onExposureWarning() {
-    if (!message) {
-      if (ack) {
-        ack('Test passed');
-        return;
-      }
+      console.log(warn(JSON.stringify(message, null, 3)));
+      console.groupEnd();
+    });
+  } else if (query.visitor || query.admin) {
+    if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
+      let msg = `Nothing pending for ${query.visitor}`;
+      console.log(msg);
+      return msg;
     }
 
-    console.log(colorExposureWarning(`Socket ${id} WARNED`));
+    pendingWarnings.forEach((value, key) => {
+      const message = {
+        visitor: key,
+        exposureDates: value,
+        room: '',
+      };
+      privateMessage(query.visitor, 'exposureAlert', message);
+      console.groupCollapsed('Pending Alerts:');
 
-    console.log(colorExposureWarning(`Warning on socket ${id} is PENDING`));
+      console.log(warn(JSON.stringify(message, null, 3)));
+      console.groupEnd();
+      pendingWarnings.delete(key);
+    });
   }
 }
+
 // end helpers
 
 // Heavy lifting below
@@ -132,7 +133,7 @@ function feedback() {
 io.on('reconnect', (socket) => {
   // immediately reconnection
   if (socket.handshake.query.id) {
-    S.handlePendings(socket.handshake.query);
+    handlePendings(socket.handshake.query);
     console.table(S.sockets);
   }
 });
@@ -144,25 +145,15 @@ io.on('connection', (socket) => {
 
   // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
-    console.groupCollapsed(`[${getNow()}] onConnection:`);
-    console.log(`client: ${query.visitor || query.room || query.admin}`);
-    let result = S.handlePendings(query);
-    query.result = result;
-    console.group(`All Sockets and Available Rooms`);
-    console.log('sockets:', S.sockets);
-    console.log('available:', S.available);
-    console.log('rooms:', S.rooms);
-    console.log('visitors:', S.visitors);
-    console.groupEnd();
-    console.groupEnd();
-    S.exposeOpenRooms();
+    onConnection(query);
   } else {
     console.error('socket lacks ID:', socket.handshake.query);
     socket.disconnect();
   }
   //...........................................................................//
-  //listeners
+  //#region Listeners
 
+  //#region Open/Close Room
   // called by State Machine to bring a Room online
   // so that Visitors can enter
   // this can change the state of io...rooms
@@ -170,14 +161,23 @@ io.on('connection', (socket) => {
   const onOpenRoom = (data, ack) => {
     try {
       const { room, id, nsp } = data;
-      console.groupCollapsed('onOpenRoom');
+
+      console.groupCollapsed(`[${getNow()}] EVENT: onOpenRoom ${room}`);
       console.log(`Open Rooms before ${room} opens...`);
-      console.table(S.getOpenRooms());
+      console.log(printJson(S.openRooms));
+
       socket.join(room);
+
       console.log(`...and after ${room} opens`);
-      console.table(S.getOpenRooms());
-      console.groupEnd();
-      S.exposeOpenRooms();
+      console.log(printJson(S.exposeOpenRooms()));
+
+      console.log('Emitted exposeOpenRooms event');
+
+      console.log('Pending Warnings:');
+      console.log(printJson([...pendingWarnings]));
+
+      // check for pending warnings
+      handlePendings(socket.handshake.query);
       // if this checks for connection, why not check Room connected property?
       const assertion = S.roomIdsIncludeSocket(room, id);
 
@@ -188,41 +188,44 @@ io.on('connection', (socket) => {
       }
     } catch (error) {
       console.error('Oops, onOpenRoom() hit this:', error.message);
+    } finally {
+      console.groupEnd();
     }
   };
-  // Room sends this event
-  // Server forwards content to Visitor(s) with exposureAlert event
-  function onAlertVisitor(data, ack) {
-    // Visitor message includes the Room names to alert
+
+  const onCloseRoom = function (data, ack) {
     try {
-      const { message, visitor, id } = data;
+      const { room, id, nsp } = data;
+      console.groupCollapsed(`[${getNow()}] EVENT: onCloseRoom [${room}]`);
+      console.log(`Rooms before ${room} closing...`);
+      console.log(printJson(S.openRooms));
+      socket.leave(room);
+      console.log(`...after ${room} closing`);
+      console.log(printJson(S.openRooms));
 
-      if (!message || !visitor) {
-        if (ack) {
-          ack(
-            new error(
-              `${
-                message ? 'Missing visitor identity' : 'No message to process'
-              }`
-            )
-          );
-        }
-        return;
-      }
+      // if this checks for connection, why not check Room connected property?
+      const assertion = !S.roomIdsIncludeSocket(room, id);
 
-      let result = S.alertVisitor(data);
+      console.assert(assertion, `${id} unable to leave ${room}`);
+
       if (ack) {
-        ack(result);
+        ack({ event: 'onCloseRoom', room: room, result: assertion });
       }
     } catch (error) {
-      console.error('onAlertVisitor sees:', error);
+      console.error('Oops, closeRoom() hit this:', error.message);
+    } finally {
+      console.groupEnd();
     }
-  }
+  };
+  //#endregion
+
+  //#region Enter/Leave Room
   // Visitor sends this event
   const onEnterRoom = (data, ack) => {
     try {
       const { room, id, nsp, sentTime, visitor } = data;
-      console.group(`[${getNow()}] onEnterRoom`);
+      console.groupCollapsed(`[${getNow()}] EVENT: onEnterRoom ${room}`);
+
       // first, ensure the Room is open (note S.rooms returns an object
       // that will include the name of an Open Room after a Room opens its own
       // io room):
@@ -281,86 +284,128 @@ io.on('connection', (socket) => {
       console.groupEnd();
     } catch (error) {
       console.error('Oops, onEnterRoom() hit this:', error);
-    }
-  };
-
-  // Visitor sends this event containing all warnings for all exposed Rooms
-  const onExposureWarning = (data, ack) => {
-    try {
-      const { visitor, warnings } = data;
-      console.table(data);
-      let results = [];
-
-      console.log('rooms:', S.rooms);
-
-      // iterate collection notifying each Room separately
-      Object.entries(warnings).forEach((warning) => {
-        results.push(S.notifyRoom({ warning: warning, visitor: visitor }));
-      });
-
-      if (ack) {
-        ack({
-          event: 'onExposureWarning',
-          result: results,
-          emit: 'notifyRoom',
-        });
-      }
-    } catch (error) {
-      console.error('onExposureWarning sees:', error);
+    } finally {
+      console.groupEnd();
     }
   };
 
   const onLeaveRoom = (data, ack) => {
-    socket.leave(data.room.room);
+    const { room, visitor, sentTime, message } = data;
+    console.groupCollapsed(`[${getNow()}] EVENT: onLeaveRoom ${room.room}`);
+    socket.leave(room.room);
 
     // handled by Room.checkOut()
     // sending to individual socketid (private message)
-    io.to(data.room.room).emit('checkOut', {
-      visitor: data.visitor,
-      sentTime: data.sentTime,
-      room: data.room,
-      message: data.message,
+    io.to(room.room).emit('checkOut', {
+      visitor: visitor,
+      sentTime: sentTime,
+      room: room,
+      message: message,
     });
 
-    S.updateOccupancy(data.room.room);
+    S.updateOccupancy(room.room);
 
-    const msg = `Using their own socket ${socket.id}, ${data.visitor.visitor} ${
-      S.roomIdsIncludeSocket(data.room.room, socket.handshake.query.id)
+    const msg = `Using their own socket ${socket.id}, ${visitor.visitor} ${
+      S.roomIdsIncludeSocket(room.room, socket.handshake.query.id)
         ? 'did not make it out of'
         : 'made it out of'
-    } Room [${data.room.room} ${data.room.id}] on ${getNow()}`;
+    } Room [${room.room} ${room.id}] on ${getNow()}`;
 
     console.log(warn('leaveRoom():', msg));
     if (ack) {
       ack(msg);
     }
   };
+  //#endregion
 
-  const onCloseRoom = function (data, ack) {
+  //#region Warnings and Alerts
+  // Visitor sends this event containing all warnings for all exposed Rooms
+  const onExposureWarning = (data, ack) => {
     try {
-      const { room, id, nsp } = data;
-      console.groupCollapsed('onCloseRoom');
-      console.log(`Rooms before ${room} closing`);
-      console.table(S.rooms);
-      socket.leave(room);
-      console.log(`Rooms after ${room} closing`);
-      console.table(S.rooms);
-      console.groupEnd();
+      const { visitor, warnings } = data;
+      console.groupCollapsed(
+        `[${getNow()}] EVENT: onExposureWarning from [${visitor.visitor}]`
+      );
+      console.log('Warning data:');
+      console.log(printJson(data));
+      let results = [];
 
-      // if this checks for connection, why not check Room connected property?
-      const assertion = !S.roomIdsIncludeSocket(room, id);
-
-      console.assert(assertion, `${id} unable to leave ${room}`);
+      // iterate collection notifying each Room separately
+      Object.entries(warnings).forEach((warning) => {
+        let roomName = warning[0];
+        if (S.openRooms.filter((v) => v.room == roomName)) {
+          console.log(`${roomName} is open. Emitting event.`);
+          results.push(S.notifyRoom({ warning: warning, visitor: visitor }));
+        } else {
+          results.push(`${roomName} PENDING`);
+          console.warn(`${roomName} is close. caching event.`);
+          pendingWarnings.set(roomName, data);
+        }
+      });
+      console.warn('Pending Warnings:');
+      console.warn(printJson([...pendingWarnings]));
 
       if (ack) {
-        ack({ event: 'onCloseRoom', room: room, result: assertion });
+        ack({
+          event: 'onExposureWarning',
+          result: results.flat(),
+          emit: 'notifyRoom',
+        });
       }
     } catch (error) {
-      console.error('Oops, closeRoom() hit this:', error.message);
+      console.error('onExposureWarning sees:', error);
+    } finally {
+      console.groupEnd();
     }
   };
 
-  // end listeners
+  // Room sends this event
+  // Server forwards content to Visitor(s) with exposureAlert event
+  function onAlertVisitor(data, ack) {
+    // Visitor message includes the Room names to alert
+    try {
+      const { message, visitor, id } = data;
+      console.groupCollapsed(
+        `[${getNow()}] EVENT: onAlertVisitor [${visitor}]`
+      );
+      if (!message || !visitor) {
+        if (ack) {
+          ack(
+            new error(
+              `${
+                message ? 'Missing visitor identity' : 'No message to process'
+              }`
+            )
+          );
+        }
+        return;
+      }
+      let result;
+      // send or cache the alert
+      console.log(`Alerting ${visitor}`);
+      // Ensure Visitor is online to see alert, otherwise cache and send when they login again
+      if (S.visitors.filter((v) => v.visitor === visitor)) {
+        // sending to visitor socket in visitor's room (except sender)
+        result = S.alertVisitor(data);
+      } else {
+        // cache the Visitor warning
+        this.pendingWarnings.set(visitor, data);
+
+        return `Server: ${visitor} unavailable. DEFERRED ALERT.`;
+      }
+
+      if (ack) {
+        ack(result);
+      }
+    } catch (error) {
+      console.error('onAlertVisitor sees:', error);
+    } finally {
+      console.groupEnd();
+    }
+  }
+  //#endregion
+
+  //#endregion end listeners
   //...........................................................................//
 
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
@@ -397,7 +442,7 @@ io.on('connection', (socket) => {
   });
   socket.on('exposePendingWarnings', (data, ack) => {
     if (ack) {
-      ack(S.pendingWarnings);
+      ack(pendingWarnings);
     }
   });
   socket.on('exposeAvailableRooms', (data, ack) => {

@@ -10,7 +10,7 @@ const info = clc.cyan;
 const highlight = clc.magenta;
 // globals
 let namespace = '/';
-let pendingVisitors = new Map();
+let pendingWarnings = new Map();
 
 const getNow = () => {
   return moment().format('HH:mm:ss');
@@ -69,9 +69,9 @@ const logResults = (function () {
 })();
 
 class ServerProxy {
-  constructor(io) {
+  constructor(io, pendingWarnings) {
     this.io = io;
-    this.pendingWarnings = new Map();
+    this.pendingWarnings = pendingWarnings;
   }
 
   get sockets() {
@@ -103,7 +103,7 @@ class ServerProxy {
     return this.sockets.filter((v) => v.visitor);
   }
 
-  getOpenRooms() {
+  get openRooms() {
     let a = this.available;
     let o = this.rooms;
     return a.filter((v) => o[v.room]);
@@ -118,39 +118,33 @@ class ServerProxy {
 
   alertVisitor(data) {
     const { message, visitor, visitorId } = data;
-
-    // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-    if (this.roomIsOnline(visitorId)) {
-      // sending to visitor socket in visitor's room (except sender)
-      this.privateMessage(visitorId, 'exposureAlert', message);
-      return `Server: Alerted ${visitor}`;
-    } else {
-      // cache the Visitor warning
-      this.pendingWarnings.set(visitorId, data);
-
-      return `Server: ${visitor} unavailable. DEFERRED ALERT.`;
-    }
+    this.privateMessage(visitorId, 'exposureAlert', message);
+    return `Server: Alerted ${visitor}`;
   }
 
   notifyRoom(data) {
     const { visitor, warning } = data;
+    try {
+      const roomName = warning[0];
 
-    let warnedRooms = [];
-    const roomName = warning[0];
-    let message = {
-      exposureDates: warning[1].dates,
-      room: roomName,
-      visitor: visitor,
-    };
-    // see if the namespace includes this Room ID
-    if (this.rooms[roomName]) {
+      console.group(`[${getNow()}] EVENT: notifyRoom from ${roomName}`);
+      // see if the namespace includes this Room ID
+      let message = {
+        exposureDates: warning[1].dates,
+        room: roomName,
+        visitor: visitor,
+      };
+      console.log(`Warning to ${roomName}:`);
+      console.log(printJson(warning));
       this.privateMessage(roomName, 'notifyRoom', message);
-      warnedRooms.push(`${message.room} WARNED.`);
-    } else {
-      this.pendingWarnings.set(roomName, data);
-      warnedRooms.push(`${message.room} PENDING.`);
+      return `${roomName} WARNED`;
+    } catch (error) {
+      console.error(error);
+      return error;
+    } finally {
+      console.groupEnd();
     }
-    return warnedRooms;
+    console.log(`TEST`);
   }
 
   log() {
@@ -173,51 +167,6 @@ class ServerProxy {
     }
 
     this.openMyRoom();
-  }
-
-  handlePendings(query) {
-    if (query.room || query.admin) {
-      if (!this.pendingWarnings.size || !this.pendingWarnings.has(query.id)) {
-        let msg = `Nothing pending for ${query.room}`;
-        console.log(msg);
-
-        return msg;
-      }
-
-      this.pendingWarnings.forEach((value, key) => {
-        const message = {
-          visitor: '',
-          exposureDates: value,
-          room: key,
-        };
-        this.privateMessage(query.room, 'notifyRoom', message);
-        this.pendingWarnings.delete(key);
-        console.groupCollapsed(`Pending Warnings for ${query.room}:`);
-
-        console.log(warn(JSON.stringify(message, null, 3)));
-        console.groupEnd();
-      });
-    } else if (query.visitor || query.admin) {
-      if (!this.pendingWarnings.size || !this.pendingWarnings.has(query.id)) {
-        let msg = `Nothing pending for ${query.visitor}`;
-        console.log(msg);
-        return msg;
-      }
-
-      this.pendingWarnings.forEach((value, key) => {
-        const message = {
-          visitor: key,
-          exposureDates: value,
-          room: '',
-        };
-        this.privateMessage(query.visitor, 'exposureAlert', message);
-        console.groupCollapsed('Pending Alerts:');
-
-        console.log(warn(JSON.stringify(message, null, 3)));
-        console.groupEnd();
-        this.pendingWarnings.delete(key);
-      });
-    }
   }
 
   // Event Heloers
@@ -246,19 +195,16 @@ class ServerProxy {
       return false;
     }
   }
-  // use id if Visitors don't have rooms with their names on them
-  // as is the case 11.7.2020
+
   roomIsOnline(id) {
-    // this only works for Rooms (unless we give Visitors rooms by the name)
-    // return this.rooms[roomName];
-    return this.sockets.filter((v) => v.id == id);
+    return this.io.nsps[namespace].adapter.nsp.sockets[id];
   }
   socketIsOnline(id) {
     return this.io.nsps[namespace].sockets[id];
   }
 
   exposeOpenRooms() {
-    const openRooms = this.getOpenRooms();
+    const openRooms = this.openRooms;
     this.io.of(namespace).emit('openRoomsExposed', openRooms);
     return openRooms;
   }
