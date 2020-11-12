@@ -2,7 +2,6 @@ const moment = require('moment');
 const { SOURCE, ROOM_TYPE } = require('./types');
 
 const clc = require('cli-color');
-const { relativeTimeThreshold } = require('moment');
 const success = clc.red.green;
 const error = clc.red.bold;
 const warn = clc.yellow;
@@ -92,17 +91,33 @@ class ServerProxy {
       []
     );
   }
+
+  get rawSockets() {
+    let x = [...Object.entries(this.io.nsps[namespace].adapter.nsp.sockets)];
+    return x;
+  }
+
+  // online sockets that represent Rooms
+  get available() {
+    return this.sockets.filter((v) => v.room);
+  }
+
+  // includes sockets with generated IDs and given IDs
+  // note: the latter implies the former
+  // so a Room can be absent in this list even if its room
+  // remains online
+  // also, Visitors also have rooms with generated IDs
+  // but they will appear visitors (below), and not in rooms
   get rooms() {
     return this.io.nsps[namespace].adapter.rooms;
   }
 
-  get available() {
-    return this.sockets.filter((v) => v.room);
-  }
+  // online sockets that represent Visitors
   get visitors() {
     return this.sockets.filter((v) => v.visitor);
   }
 
+  // online Rooms (a Room)
   get openRooms() {
     let a = this.available;
     let o = this.rooms;
@@ -139,6 +154,7 @@ class ServerProxy {
       this.privateMessage(roomName, 'notifyRoom', message);
       return `${roomName} WARNED`;
     } catch (error) {
+      console.groupEnd();
       console.error(error);
       return error;
     } finally {

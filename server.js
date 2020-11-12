@@ -63,25 +63,25 @@ function onConnection(query) {
   console.groupCollapsed(
     `[${getNow()}] EVENT: onConnection [${
       query.visitor || query.room || query.admin
-    }]`
+    }] ${query.state ? query.state : ''}`
   );
 
   let result = handlePendings(query);
 
   query.result = result;
-  console.group(`All Sockets and Available Rooms`);
   console.log('Sockets:', printJson(S.sockets));
   console.log('Available Rooms:', printJson(S.available));
   console.log('Rooms:', printJson(S.rooms));
+  console.log('Socket Room State:', query.state);
   console.log('Open Rooms:', printJson(S.openRooms));
   console.log('Visitors:', printJson(S.visitors));
-  console.log('Pending Warnings:', printJson([...pendingWarnings]));
-  console.groupEnd();
   console.groupEnd();
   S.exposeOpenRooms();
 }
 
 function handlePendings(query) {
+  console.log('Pending Warnings:', printJson([...pendingWarnings]));
+
   if (query.room) {
     if (!pendingWarnings.has(query.room)) {
       let msg = `Nothing pending for ${query.room}`;
@@ -103,7 +103,7 @@ function handlePendings(query) {
       console.groupEnd();
     });
   } else if (query.visitor || query.admin) {
-    if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
+    if (!pendingWarnings.size || !pendingWarnings.has(query.visitor)) {
       let msg = `Nothing pending for ${query.visitor}`;
       console.log(msg);
       return msg;
@@ -145,10 +145,18 @@ io.on('connection', (socket) => {
 
   // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
+    if (query.room && query.state === 'Opened') {
+      console.group(`[${getNow()}] Reopening ${query.room}`);
+      socket.join(query.room);
+      console.log('Open Rooms:', printJson(S.exposeOpenRooms()));
+      console.groupEnd();
+    }
     onConnection(query);
   } else {
+    console.group('Odd Socket. Disconnecting');
     console.error('socket lacks ID:', socket.handshake.query);
-    socket.disconnect();
+    socket.disconnect(true);
+    console.groupEnd();
   }
   //...........................................................................//
   //#region Listeners
@@ -160,16 +168,23 @@ io.on('connection', (socket) => {
   // next step in the pipeline is to access pending Visitor exposure warnings
   const onOpenRoom = (data, ack) => {
     try {
-      const { room, id, nsp } = data;
-
+      const { room, id } = data;
+      // console.log(message, socket.handshake.query);
       console.groupCollapsed(`[${getNow()}] EVENT: onOpenRoom ${room}`);
+
       console.log(`Open Rooms before ${room} opens...`);
-      console.log(printJson(S.openRooms));
+      console.log(S.openRooms);
 
       socket.join(room);
 
       console.log(`...and after ${room} opens`);
       console.log(printJson(S.exposeOpenRooms()));
+      console.log('Sockets');
+      console.log(printJson(S.sockets));
+      console.log('Available');
+      console.log(printJson(S.available));
+      console.log('Rooms');
+      console.log(printJson(S.openRooms));
 
       console.log('Emitted exposeOpenRooms event');
 
@@ -187,6 +202,7 @@ io.on('connection', (socket) => {
         ack({ event: 'onOpenRoom', room: room, result: assertion });
       }
     } catch (error) {
+      console.groupEnd();
       console.error('Oops, onOpenRoom() hit this:', error.message);
     } finally {
       console.groupEnd();
@@ -202,6 +218,10 @@ io.on('connection', (socket) => {
       socket.leave(room);
       console.log(`...after ${room} closing`);
       console.log(printJson(S.openRooms));
+      console.log('Sockets');
+      console.log(printJson(S.sockets));
+      console.log('Rooms');
+      console.log(printJson(S.openRooms));
 
       // if this checks for connection, why not check Room connected property?
       const assertion = !S.roomIdsIncludeSocket(room, id);
@@ -212,6 +232,7 @@ io.on('connection', (socket) => {
         ack({ event: 'onCloseRoom', room: room, result: assertion });
       }
     } catch (error) {
+      console.groupEnd();
       console.error('Oops, closeRoom() hit this:', error.message);
     } finally {
       console.groupEnd();
@@ -283,6 +304,7 @@ io.on('connection', (socket) => {
       }
       console.groupEnd();
     } catch (error) {
+      console.groupEnd();
       console.error('Oops, onEnterRoom() hit this:', error);
     } finally {
       console.groupEnd();
@@ -333,12 +355,14 @@ io.on('connection', (socket) => {
       // iterate collection notifying each Room separately
       Object.entries(warnings).forEach((warning) => {
         let roomName = warning[0];
-        if (S.openRooms.filter((v) => v.room == roomName)) {
+        console.log('Open Rooms:');
+        console.log(printJson(S.openRooms));
+        if (S.openRooms.filter((v) => v.room == roomName).length) {
           console.log(`${roomName} is open. Emitting event.`);
           results.push(S.notifyRoom({ warning: warning, visitor: visitor }));
         } else {
           results.push(`${roomName} PENDING`);
-          console.warn(`${roomName} is close. caching event.`);
+          console.warn(`${roomName} is closed. caching event.`);
           pendingWarnings.set(roomName, data);
         }
       });
@@ -353,6 +377,7 @@ io.on('connection', (socket) => {
         });
       }
     } catch (error) {
+      console.groupEnd();
       console.error('onExposureWarning sees:', error);
     } finally {
       console.groupEnd();
@@ -384,12 +409,12 @@ io.on('connection', (socket) => {
       // send or cache the alert
       console.log(`Alerting ${visitor}`);
       // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-      if (S.visitors.filter((v) => v.visitor === visitor)) {
+      if (S.visitors.filter((v) => v.visitor === visitor).length) {
         // sending to visitor socket in visitor's room (except sender)
         result = S.alertVisitor(data);
       } else {
         // cache the Visitor warning
-        this.pendingWarnings.set(visitor, data);
+        pendingWarnings.set(visitor, data);
 
         return `Server: ${visitor} unavailable. DEFERRED ALERT.`;
       }
@@ -398,7 +423,8 @@ io.on('connection', (socket) => {
         ack(result);
       }
     } catch (error) {
-      console.error('onAlertVisitor sees:', error);
+      console.groupEnd();
+      console.error('ERROR: onAlertVisitor sees:', error);
     } finally {
       console.groupEnd();
     }
@@ -460,13 +486,17 @@ io.on('connection', (socket) => {
     if (ack) ack(`Server is at your disposal, ${data}`);
   });
 
-  socket.on('disconnected', () => {
+  socket.on('disconnect', () => {
     console.log('Remaining Sockets:');
-    console.table(S.sockets);
+    console.table(printJson(S.sockets));
   });
 
   socket.on('disconnecting', (reason) => {
-    console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.log(
+      `[${getNow()}] EVENT: onDisconnecting ${printJson(
+        socket.handshake.query
+      )}`
+    );
     console.warn(
       getNow(),
       `Disconnecting Socket ${
@@ -475,8 +505,12 @@ io.on('connection', (socket) => {
         socket.handshake.query.admin
       } (${socket.id}) `
     );
-    console.warn('Reason:', reason);
-    console.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    if (socket.handshake.query.room) {
+      console.log(printJson(S.openRooms));
+    }
+    console.log(`[${getNow()}] ${printJson(Object.keys(socket.rooms))}`);
+    console.warn('\tReason:', reason);
+    console.groupEnd();
   });
 
   socket.on('disconnectAll', () => {
