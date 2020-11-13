@@ -115,7 +115,7 @@ function handlePendings(query) {
         exposureDates: value,
         room: '',
       };
-      privateMessage(query.id, 'exposureAlert', message);
+      S.privateMessage(query.id, 'exposureAlert', message);
       console.groupCollapsed('Pending Alerts:');
 
       console.log(warn(JSON.stringify(message, null, 3)));
