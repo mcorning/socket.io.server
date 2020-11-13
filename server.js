@@ -487,40 +487,35 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('Remaining Sockets:');
-    console.table(printJson(S.sockets));
+    console.warn('Remaining Sockets:');
+    console.warn(printJson(S.sockets));
   });
 
   socket.on('disconnecting', (reason) => {
-    console.log(
-      `[${getNow()}] EVENT: onDisconnecting ${printJson(
-        socket.handshake.query
-      )}`
+    const { visitor, room, admin, name, id } = socket.handshake.query;
+    console.groupCollapsed(
+      `[${getNow()}] EVENT: onDisconnecting ${name} (${id})      )}`
     );
     console.warn(
       getNow(),
-      `Disconnecting Socket ${
-        socket.handshake.query.visitor ||
-        socket.handshake.query.room ||
-        socket.handshake.query.admin
-      } (${socket.id}) `
+      `Disconnecting Socket ${visitor || room || admin} (${socket.id}) `
     );
-    if (socket.handshake.query.room) {
-      console.log(printJson(S.openRooms));
+    if (room) {
+      console.warn(printJson(S.openRooms));
     }
-    console.log(`[${getNow()}] ${printJson(Object.keys(socket.rooms))}`);
+    console.warn(`[${getNow()}] ${printJson(Object.keys(socket.rooms))}`);
     console.warn('\tReason:', reason);
     console.groupEnd();
   });
 
   socket.on('disconnectAll', () => {
     Object.values(io.sockets.clients().connected).map((v) => v.disconnect());
-    console.log('Remaining connections :>> ', io.sockets.connected);
+    console.warn('Remaining connections :>> ', io.sockets.connected);
   });
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 10.06.16.27'));
+  console.log(notice('Build: 11.12.17.10'));
   console.log(notice(moment().format('llll')));
   console.log(
     notice(`socket.io server listening on http://localhost: ${port}`)
