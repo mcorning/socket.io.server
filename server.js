@@ -515,7 +515,7 @@ io.on('connection', (socket) => {
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 11.12.17.10'));
+  console.log(notice('Build: 11.13.10.54'));
   console.log(notice(moment().format('llll')));
   console.log(
     notice(`socket.io server listening on http://localhost: ${port}`)
