@@ -35,6 +35,15 @@ io.engine.generateId = (req) => {
   return base64id.generateId();
 };
 
+//#region Admin tests: code to be extended soon
+const admin = io.of('/admin');
+admin.on('connect', (socket) => {
+  console.warn('admin socket.id:', socket.id);
+
+  socket.on('message', (data) => console.log(data));
+});
+//#endregion
+
 // set up Server Proxy
 const { getNow, printJson, logResults, ServerProxy } = require('./radar');
 let pendingWarnings = new Map();
@@ -494,7 +503,9 @@ io.on('connection', (socket) => {
   socket.on('disconnecting', (reason) => {
     const { visitor, room, admin, name, id } = socket.handshake.query;
     console.groupCollapsed(
-      `[${getNow()}] EVENT: onDisconnecting ${name} (${id})      )}`
+      `[${getNow()}] EVENT: onDisconnecting ${
+        visitor || room || admin
+      } (${id})      )}`
     );
     console.warn(
       getNow(),
@@ -515,10 +526,8 @@ io.on('connection', (socket) => {
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 11.13.10.54'));
+  console.log(notice('Build: 11.17.11.15'));
   console.log(notice(moment().format('llll')));
-  console.log(
-    notice(`socket.io server listening on http://localhost: ${port}`)
-  );
+  console.log(info(`socket.io server listening on http://localhost: ${port}`));
   console.log();
 });
