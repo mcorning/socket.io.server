@@ -101,7 +101,7 @@ function handlePendings(query) {
     pendingWarnings.forEach((value, key) => {
       const message = {
         visitor: '',
-        exposureDates: value.warnings[key].dates,
+        exposureDates: value,
         room: key,
       };
       S.privateMessage(query.room, 'notifyRoom', message);
@@ -254,7 +254,7 @@ io.on('connection', (socket) => {
   const onEnterRoom = (data, ack) => {
     try {
       const { room, id, nsp, sentTime, visitor } = data;
-      console.groupCollapsed(`[${getNow()}] EVENT: onEnterRoom ${room}`);
+      console.groupCollapsed(`[${getNow()}] EVENT: onEnterRoom ${room.room}`);
 
       // first, ensure the Room is open (note S.rooms returns an object
       // that will include the name of an Open Room after a Room opens its own
@@ -351,28 +351,80 @@ io.on('connection', (socket) => {
 
   //#region Warnings and Alerts
   // Visitor sends this event containing all warnings for all exposed Rooms
+  // Warning data:
+  // {
+  //    "sentTime": "2020-11-18T16:07:52.336Z",
+  //    "visitor": {
+  //       "$id": "oTFyI-JZyKBS5jNYAAAA",
+  //       "visitor": "You",
+  //       "id": "oTFyI-JZyKBS5jNYAAAA",
+  //       "nsp": "enduringNet"
+  //    },
+  //    "warnings": {
+  //       "fika": {
+  //          "room": "fika",
+  //          "dates": [
+  //             "2020-11-17",
+  //             "2020-11-17"
+  //          ]
+  //       }
+  //    }
+  // }
+  // Warning data:
+  // {
+  //    "sentTime": "2020-11-18T16:30:01.684Z",
+  //    "visitor": {
+  //       "$id": "oTFyI-JZyKBS5jNYAAAA",
+  //       "visitor": "You",
+  //       "id": "oTFyI-JZyKBS5jNYAAAA",
+  //       "nsp": "enduringNet"
+  //    },
+  //    "warningsMap": [
+  //       [
+  //          "fika",
+  //          {
+  //             "room": "fika",
+  //             "dates": [
+  //                "2020-11-17",
+  //                "2020-11-17"
+  //             ]
+  //          }
+  //       ]
+  //    ]
+  // }
   const onExposureWarning = (data, ack) => {
     try {
-      const { visitor, warnings } = data;
+      // warnings is a Map
+      const { visitor, reason, warningsMap } = data;
       console.groupCollapsed(
-        `[${getNow()}] EVENT: onExposureWarning from [${visitor.visitor}]`
+        `[${getNow()}] EVENT: onExposureWarning from [${visitor}]`
       );
       console.log('Warning data:');
       console.log(printJson(data));
       let results = [];
 
+      const warnings = new Map(warningsMap);
       // iterate collection notifying each Room separately
-      Object.entries(warnings).forEach((warning) => {
-        let roomName = warning[0];
+      warnings.forEach((exposureDates, roomName) => {
         console.log('Open Rooms:');
         console.log(printJson(S.openRooms));
         if (S.openRooms.filter((v) => v.room == roomName).length) {
           console.log(`${roomName} is open. Emitting event.`);
-          results.push(S.notifyRoom({ warning: warning, visitor: visitor }));
+          results.push(
+            S.notifyRoom({
+              room: roomName,
+              reason: reason,
+              exposureDates: exposureDates,
+              visitor: visitor,
+            })
+          );
         } else {
+          pendingWarnings.set(roomName, exposureDates);
+
           results.push(`${roomName} PENDING`);
-          console.warn(`${roomName} is closed. caching event.`);
-          pendingWarnings.set(roomName, data);
+          console.warn(`${roomName} is closed. Caching event.`);
+          console.groupEnd();
+          return;
         }
       });
       console.warn('Pending Warnings:');
@@ -382,7 +434,7 @@ io.on('connection', (socket) => {
         ack({
           event: 'onExposureWarning',
           result: results.flat(),
-          emit: 'notifyRoom',
+          emits: 'notifyRoom',
         });
       }
     } catch (error) {
@@ -528,6 +580,6 @@ io.on('connection', (socket) => {
 http.listen(port, function () {
   console.log(notice('Build: 11.17.11.15'));
   console.log(notice(moment().format('llll')));
-  console.log(info(`socket.io server listening on http://localhost: ${port}`));
-  console.log();
+  console.log(info(`socket.io server listening on PORT: ${port}`));
+  console.log(' ');
 });

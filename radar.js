@@ -138,21 +138,13 @@ class ServerProxy {
   }
 
   notifyRoom(data) {
-    const { visitor, warning } = data;
+    const { room } = data;
     try {
-      const roomName = warning[0];
-
-      console.group(`[${getNow()}] EVENT: notifyRoom from ${roomName}`);
-      // see if the namespace includes this Room ID
-      let message = {
-        exposureDates: warning[1].dates,
-        room: roomName,
-        visitor: visitor,
-      };
-      console.log(`Warning to ${roomName}:`);
-      console.log(printJson(warning));
-      this.privateMessage(roomName, 'notifyRoom', message);
-      return `${roomName} WARNED`;
+      console.group(`[${getNow()}] EVENT: notifyRoom from ${room}`);
+      console.log(`Warning message to ${room}:`);
+      console.log(printJson(data));
+      this.privateMessage(room, 'notifyRoom', data);
+      return `${room} WARNED`;
     } catch (error) {
       console.groupEnd();
       console.error(error);
@@ -196,8 +188,9 @@ class ServerProxy {
     //     exposureDates: exposureDates, // exposure dates array
     //   }
     // );
-    // note: cannot attach callback to namespace broadcast event
     console.info(`Emitting ${event} to ${room}`);
+
+    // note: cannot attach callback to namespace broadcast event
     this.io.to(room).emit(event, message);
   }
 
