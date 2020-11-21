@@ -141,8 +141,6 @@ class ServerProxy {
     const { room } = data;
     try {
       console.group(`[${getNow()}] EVENT: notifyRoom from ${room}`);
-      console.log(`Warning message to ${room}:`);
-      console.log(printJson(data));
       this.privateMessage(room, 'notifyRoom', data);
       return `${room} WARNED`;
     } catch (error) {
@@ -152,7 +150,6 @@ class ServerProxy {
     } finally {
       console.groupEnd();
     }
-    console.log(`TEST`);
   }
 
   log() {
@@ -179,16 +176,8 @@ class ServerProxy {
 
   // Event Heloers
   privateMessage(room, event, message) {
-    // sending to individual socketid (private message)
-    // e.g.,
-    // io.to(room).emit(
-    //   'notifyRoom',
-    //   {
-    //     visitor: visitor,
-    //     exposureDates: exposureDates, // exposure dates array
-    //   }
-    // );
-    console.info(`Emitting ${event} to ${room}`);
+    console.info(`Emitting ${event} to ${room} with:`);
+    console.log('\t', printJson(message));
 
     // note: cannot attach callback to namespace broadcast event
     this.io.to(room).emit(event, message);

@@ -76,14 +76,30 @@ function onConnection(query) {
   );
 
   let result = handlePendings(query);
-
   query.result = result;
-  console.log('Sockets:', printJson(S.sockets));
-  console.log('Available Rooms:', printJson(S.available));
-  console.log('Rooms:', printJson(S.rooms));
+  console.log('Socket Room Pending State:', query.result);
   console.log('Socket Room State:', query.state);
-  console.log('Open Rooms:', printJson(S.openRooms));
-  console.log('Visitors:', printJson(S.visitors));
+
+  console.group('Sockets:');
+  console.log(printJson(S.sockets));
+  console.groupEnd();
+
+  console.group('Available Rooms:');
+  console.log(printJson(S.available));
+  console.groupEnd();
+
+  console.group('Rooms:');
+  console.log(printJson(S.rooms));
+  console.groupEnd();
+
+  console.group('Open Rooms:');
+  console.log(printJson(S.openRooms));
+  console.groupEnd();
+
+  console.group('Visitors:');
+  console.log(printJson(S.visitors));
+  console.groupEnd();
+
   console.groupEnd();
   S.exposeOpenRooms();
 }
@@ -91,6 +107,7 @@ function onConnection(query) {
 function handlePendings(query) {
   console.log('Pending Warnings:', printJson([...pendingWarnings]));
 
+  // handle Room
   if (query.room) {
     if (!pendingWarnings.has(query.room)) {
       let msg = `Nothing pending for ${query.room}`;
@@ -111,23 +128,22 @@ function handlePendings(query) {
       console.log(warn(JSON.stringify(message, null, 3)));
       console.groupEnd();
     });
-  } else if (query.visitor || query.admin) {
-    if (!pendingWarnings.size || !pendingWarnings.has(query.visitor)) {
+  }
+  // handle Visitor or Admin
+  else if (query.visitor || query.admin) {
+    if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
       let msg = `Nothing pending for ${query.visitor}`;
       console.log(msg);
       return msg;
     }
 
     pendingWarnings.forEach((value, key) => {
-      const message = {
-        visitor: key,
-        exposureDates: value,
-        room: '',
-      };
-      S.privateMessage(query.id, 'exposureAlert', message);
-      console.groupCollapsed('Pending Alerts:');
-
-      console.log(warn(JSON.stringify(message, null, 3)));
+      // const message = {
+      //   visitor: key,
+      //   exposureDates: value.message,
+      //   room: '',
+      // };
+      S.privateMessage(query.id, 'exposureAlert', value.message);
       console.groupEnd();
       pendingWarnings.delete(key);
     });
@@ -155,14 +171,14 @@ io.on('connection', (socket) => {
   // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
     if (query.room && query.state === 'Opened') {
-      console.group(`[${getNow()}] Reopening ${query.room}`);
+      console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
       socket.join(query.room);
       console.log('Open Rooms:', printJson(S.exposeOpenRooms()));
       console.groupEnd();
     }
     onConnection(query);
   } else {
-    console.group('Odd Socket. Disconnecting');
+    console.groupCollapsed('Odd Socket. Disconnecting');
     console.error('socket lacks ID:', socket.handshake.query);
     socket.disconnect(true);
     console.groupEnd();
@@ -370,46 +386,27 @@ io.on('connection', (socket) => {
   //       }
   //    }
   // }
-  // Warning data:
-  // {
-  //    "sentTime": "2020-11-18T16:30:01.684Z",
-  //    "visitor": {
-  //       "$id": "oTFyI-JZyKBS5jNYAAAA",
-  //       "visitor": "You",
-  //       "id": "oTFyI-JZyKBS5jNYAAAA",
-  //       "nsp": "enduringNet"
-  //    },
-  //    "warningsMap": [
-  //       [
-  //          "fika",
-  //          {
-  //             "room": "fika",
-  //             "dates": [
-  //                "2020-11-17",
-  //                "2020-11-17"
-  //             ]
-  //          }
-  //       ]
-  //    ]
-  // }
   const onExposureWarning = (data, ack) => {
     try {
-      // warnings is a Map
       const { visitor, reason, warningsMap } = data;
+      console.assert(visitor, 'visitor cannot be empty');
       console.groupCollapsed(
         `[${getNow()}] EVENT: onExposureWarning from [${visitor}]`
       );
-      console.log('Warning data:');
+      console.group('Open Rooms:');
+      console.log(printJson(S.openRooms));
+      console.groupEnd();
+
+      console.group('Warning data:');
       console.log(printJson(data));
+      console.groupEnd();
+
       let results = [];
 
       const warnings = new Map(warningsMap);
       // iterate collection notifying each Room separately
       warnings.forEach((exposureDates, roomName) => {
-        console.log('Open Rooms:');
-        console.log(printJson(S.openRooms));
         if (S.openRooms.filter((v) => v.room == roomName).length) {
-          console.log(`${roomName} is open. Emitting event.`);
           results.push(
             S.notifyRoom({
               room: roomName,
@@ -450,9 +447,9 @@ io.on('connection', (socket) => {
   function onAlertVisitor(data, ack) {
     // Visitor message includes the Room names to alert
     try {
-      const { message, visitor, id } = data;
+      const { message, visitor, visitorId } = data;
       console.groupCollapsed(
-        `[${getNow()}] EVENT: onAlertVisitor [${visitor}]`
+        `[${getNow()}] EVENT: onAlertVisitor [${visitor}/${visitorId}]`
       );
       if (!message || !visitor) {
         if (ack) {
@@ -475,9 +472,9 @@ io.on('connection', (socket) => {
         result = S.alertVisitor(data);
       } else {
         // cache the Visitor warning
-        pendingWarnings.set(visitor, data);
+        pendingWarnings.set(visitorId, data);
 
-        return `Server: ${visitor} unavailable. DEFERRED ALERT.`;
+        return `Server: ${visitor}/${visitorId} unavailable. DEFERRED ALERT.`;
       }
 
       if (ack) {
@@ -548,8 +545,9 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.warn('Remaining Sockets:');
+    console.groupCollapsed('Remaining Sockets:');
     console.warn(printJson(S.sockets));
+    console.groupEnd();
   });
 
   socket.on('disconnecting', (reason) => {
@@ -578,7 +576,7 @@ io.on('connection', (socket) => {
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 11.19.20.41'));
+  console.log(notice('Build: 11.20.23.41'));
   console.log(notice(moment().format('llll')));
   console.log(info(`socket.io server listening on PORT: ${port}`));
   console.log(' ');
