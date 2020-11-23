@@ -131,10 +131,81 @@ class ServerProxy {
     return this.rooms[room].length;
   }
 
-  alertVisitor(data) {
-    const { message, visitor, visitorId } = data;
-    this.privateMessage(visitorId, 'exposureAlert', message);
-    return `Server: Alerted ${visitor}`;
+  sendOrPend(data) {
+    const { event, message, visitor, room } = data;
+    if (event == 'exposureAlert') {
+      // Ensure Visitor is online to see alert, otherwise cache and send when they login again
+      if (this.visitors.filter((v) => v.visitor === visitor.visitor).length) {
+        // sending to visitor socket in visitor's room (except sender)
+        this.privateMessage(visitor.id, event, message);
+        return `Server: Alerted ${visitor.visitor}/${visitor.id}`;
+      } else {
+        // cache the Visitor warning
+        pendingWarnings.set(visitor.id, data);
+
+        return `Server: ${visitor.visitor}/${visitor.id} unavailable. DEFERRED ALERT.`;
+      }
+    }
+    if (event == 'notifyRoom') {
+      if (this.openRooms.filter((v) => v.room == room.room).length) {
+        // data = {
+        //   room: room.room,
+        //   reason: message.reason,
+        //   exposureDates: message,
+        //   visitor: visitor,
+        // };
+        this.privateMessage(room.room, event, data);
+      } else {
+        pendingWarnings.set(room.room, message);
+        console.warn(`${room.room} is closed. Caching event.`);
+        return `${room.room} PENDING`;
+      }
+    }
+  }
+
+  handlePendings(query) {
+    console.log('Pending Warnings:', printJson([...pendingWarnings]));
+
+    // handle Room
+    if (query.room) {
+      if (!pendingWarnings.has(query.room)) {
+        let msg = `Nothing pending for ${query.room}`;
+        console.log(msg);
+        return msg;
+      }
+
+      pendingWarnings.forEach((value, key) => {
+        const message = {
+          visitor: '',
+          exposureDates: value,
+          room: key,
+        };
+        this.privateMessage(query.room, 'notifyRoom', message);
+        pendingWarnings.delete(key);
+        console.groupCollapsed(`Pending Warnings for ${query.room}:`);
+
+        console.log(warn(JSON.stringify(message, null, 3)));
+        console.groupEnd();
+      });
+    }
+    // handle Visitor or Admin
+    else if (query.visitor || query.admin) {
+      if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
+        let msg = `Nothing pending for ${query.visitor}`;
+        console.log(msg);
+        return msg;
+      }
+
+      pendingWarnings.forEach((value, key) => {
+        // const message = {
+        //   visitor: key,
+        //   exposureDates: value.message,
+        //   room: '',
+        // };
+        this.privateMessage(query.id, 'exposureAlert', value.message);
+        pendingWarnings.delete(key);
+      });
+    }
   }
 
   notifyRoom(data) {

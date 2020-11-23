@@ -75,7 +75,7 @@ function onConnection(query) {
     }] ${query.state ? query.state : ''}`
   );
 
-  let result = handlePendings(query);
+  let result = S.handlePendings(query);
   query.result = result;
   console.log('Socket Room Pending State:', query.result);
   console.log('Socket Room State:', query.state);
@@ -104,52 +104,6 @@ function onConnection(query) {
   S.exposeOpenRooms();
 }
 
-function handlePendings(query) {
-  console.log('Pending Warnings:', printJson([...pendingWarnings]));
-
-  // handle Room
-  if (query.room) {
-    if (!pendingWarnings.has(query.room)) {
-      let msg = `Nothing pending for ${query.room}`;
-      console.log(msg);
-      return msg;
-    }
-
-    pendingWarnings.forEach((value, key) => {
-      const message = {
-        visitor: '',
-        exposureDates: value,
-        room: key,
-      };
-      S.privateMessage(query.room, 'notifyRoom', message);
-      pendingWarnings.delete(key);
-      console.groupCollapsed(`Pending Warnings for ${query.room}:`);
-
-      console.log(warn(JSON.stringify(message, null, 3)));
-      console.groupEnd();
-    });
-  }
-  // handle Visitor or Admin
-  else if (query.visitor || query.admin) {
-    if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
-      let msg = `Nothing pending for ${query.visitor}`;
-      console.log(msg);
-      return msg;
-    }
-
-    pendingWarnings.forEach((value, key) => {
-      // const message = {
-      //   visitor: key,
-      //   exposureDates: value.message,
-      //   room: '',
-      // };
-      S.privateMessage(query.id, 'exposureAlert', value.message);
-      console.groupEnd();
-      pendingWarnings.delete(key);
-    });
-  }
-}
-
 // end helpers
 
 // Heavy lifting below
@@ -158,7 +112,7 @@ function handlePendings(query) {
 io.on('reconnect', (socket) => {
   // immediately reconnection
   if (socket.handshake.query.id) {
-    handlePendings(socket.handshake.query);
+    S.handlePendings(socket.handshake.query);
     console.table(S.sockets);
   }
 });
@@ -217,7 +171,7 @@ io.on('connection', (socket) => {
       console.log(printJson([...pendingWarnings]));
 
       // check for pending warnings
-      handlePendings(socket.handshake.query);
+      S.handlePendings(socket.handshake.query);
       // if this checks for connection, why not check Room connected property?
       const assertion = S.roomIdsIncludeSocket(room, id);
 
@@ -227,7 +181,6 @@ io.on('connection', (socket) => {
         ack({ event: 'onOpenRoom', room: room, result: assertion });
       }
     } catch (error) {
-      console.groupEnd();
       console.error('Oops, onOpenRoom() hit this:', error.message);
     } finally {
       console.groupEnd();
@@ -257,7 +210,6 @@ io.on('connection', (socket) => {
         ack({ event: 'onCloseRoom', room: room, result: assertion });
       }
     } catch (error) {
-      console.groupEnd();
       console.error('Oops, closeRoom() hit this:', error.message);
     } finally {
       console.groupEnd();
@@ -327,9 +279,7 @@ io.on('connection', (socket) => {
           });
         }
       }
-      console.groupEnd();
     } catch (error) {
-      console.groupEnd();
       console.error('Oops, onEnterRoom() hit this:', error);
     } finally {
       console.groupEnd();
@@ -362,7 +312,9 @@ io.on('connection', (socket) => {
     if (ack) {
       ack(msg);
     }
+    console.groupEnd();
   };
+
   //#endregion
 
   //#region Warnings and Alerts
@@ -388,10 +340,12 @@ io.on('connection', (socket) => {
   // }
   const onExposureWarning = (data, ack) => {
     try {
-      const { visitor, reason, warningsMap } = data;
+      const { visitor, warningsMap } = data;
       console.assert(visitor, 'visitor cannot be empty');
       console.groupCollapsed(
-        `[${getNow()}] EVENT: onExposureWarning from [${visitor}]`
+        `[${getNow()}] EVENT: onExposureWarning from [${visitor.visitor}/${
+          visitor.id
+        }]`
       );
       console.group('Open Rooms:');
       console.log(printJson(S.openRooms));
@@ -405,37 +359,23 @@ io.on('connection', (socket) => {
 
       const warnings = new Map(warningsMap);
       // iterate collection notifying each Room separately
-      warnings.forEach((exposureDates, roomName) => {
-        if (S.openRooms.filter((v) => v.room == roomName).length) {
-          results.push(
-            S.notifyRoom({
-              room: roomName,
-              reason: reason,
-              exposureDates: exposureDates,
-              visitor: visitor,
-            })
-          );
-        } else {
-          pendingWarnings.set(roomName, exposureDates);
-
-          results.push(`${roomName} PENDING`);
-          console.warn(`${roomName} is closed. Caching event.`);
-          console.groupEnd();
-          return;
-        }
+      warnings.forEach((exposureDates, room) => {
+        data.event = 'notifyRoom';
+        data.room = { room: room, id: room };
+        data.message = exposureDates;
+        results.push(S.sendOrPend(data));
       });
       console.warn('Pending Warnings:');
       console.warn(printJson([...pendingWarnings]));
 
       if (ack) {
         ack({
-          event: 'onExposureWarning',
+          handler: 'onExposureWarning',
           result: results.flat(),
           emits: 'notifyRoom',
         });
       }
     } catch (error) {
-      console.groupEnd();
       console.error('onExposureWarning sees:', error);
     } finally {
       console.groupEnd();
@@ -443,13 +383,13 @@ io.on('connection', (socket) => {
   };
 
   // Room sends this event
-  // Server forwards content to Visitor(s) with exposureAlert event
+  // Server forwards content to Visitor(s) with exposureAlert event sent with alertVisitor handler
   function onAlertVisitor(data, ack) {
     // Visitor message includes the Room names to alert
     try {
-      const { message, visitor, visitorId } = data;
+      const { message, visitor, room } = data;
       console.groupCollapsed(
-        `[${getNow()}] EVENT: onAlertVisitor [${visitor}/${visitorId}]`
+        `[${getNow()}] EVENT: onAlertVisitor [${visitor.visitor}/${visitor.id}]`
       );
       if (!message || !visitor) {
         if (ack) {
@@ -463,25 +403,16 @@ io.on('connection', (socket) => {
         }
         return;
       }
-      let result;
-      // send or cache the alert
-      console.log(`Alerting ${visitor}`);
-      // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-      if (S.visitors.filter((v) => v.visitor === visitor).length) {
-        // sending to visitor socket in visitor's room (except sender)
-        result = S.alertVisitor(data);
-      } else {
-        // cache the Visitor warning
-        pendingWarnings.set(visitorId, data);
 
-        return `Server: ${visitor}/${visitorId} unavailable. DEFERRED ALERT.`;
-      }
+      // send or cache the alert
+      console.log(`${room.room} alerting ${visitor.visitor}`);
+      data.event = 'exposureAlert';
+      let result = S.sendOrPend(data);
 
       if (ack) {
         ack(result);
       }
     } catch (error) {
-      console.groupEnd();
       console.error('ERROR: onAlertVisitor sees:', error);
     } finally {
       console.groupEnd();
