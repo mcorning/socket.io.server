@@ -137,7 +137,7 @@ class ServerProxy {
       // Ensure Visitor is online to see alert, otherwise cache and send when they login again
       if (this.visitors.filter((v) => v.visitor === visitor.visitor).length) {
         // sending to visitor socket in visitor's room (except sender)
-        this.privateMessage(visitor.id, event, message);
+        this.privateMessage(visitor.id, event, data);
         return `Server: Alerted ${visitor.visitor}/${visitor.id}`;
       } else {
         // cache the Visitor warning
