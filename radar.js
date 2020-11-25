@@ -131,34 +131,49 @@ class ServerProxy {
     return this.rooms[room].length;
   }
 
+  // called by server.onExposureWarning and server.onAlertVisitor
   sendOrPend(data) {
-    const { event, message, visitor, room } = data;
+    const { event, reason, visitor, room, exposureDates } = data;
     if (event == 'exposureAlert') {
       // Ensure Visitor is online to see alert, otherwise cache and send when they login again
       if (this.visitors.filter((v) => v.visitor === visitor.visitor).length) {
         // sending to visitor socket in visitor's room (except sender)
-        this.privateMessage(visitor.id, event, data);
+        this.privateMessage(event, data);
         return `Server: Alerted ${visitor.visitor}/${visitor.id}`;
       } else {
         // cache the Visitor warning
         pendingWarnings.set(visitor.id, data);
+        console.warn(`${room} is closed. Caching event.`);
+        console.group('Pending Warnings');
+        console.log(printJson([...pendingWarnings]));
+        console.groupEnd();
 
         return `Server: ${visitor.visitor}/${visitor.id} unavailable. DEFERRED ALERT.`;
       }
     }
     if (event == 'notifyRoom') {
-      if (this.openRooms.filter((v) => v.room == room.room).length) {
-        // data = {
-        //   room: room.room,
-        //   reason: message.reason,
-        //   exposureDates: message,
-        //   visitor: visitor,
-        // };
-        this.privateMessage(room.room, event, data);
+      // notifyRoom expects this data:
+      // {room, reason, exposureDates, visitor}
+
+      if (this.openRooms.filter((v) => v.room == room).length) {
+        this.privateMessage(event, {
+          room: room,
+          reason: reason,
+          exposureDates: exposureDates,
+          visitor: visitor.id,
+        });
       } else {
-        pendingWarnings.set(room.room, message);
-        console.warn(`${room.room} is closed. Caching event.`);
-        return `${room.room} PENDING`;
+        pendingWarnings.set(room, {
+          room: room,
+          reason: reason,
+          visitor: visitor.id,
+          exposureDates: exposureDates,
+        });
+        console.warn(`${room} is closed. Caching event.`);
+        console.group('Pending Warnings');
+        console.log(printJson([...pendingWarnings]));
+        console.groupEnd();
+        return `${room} PENDING`;
       }
     }
   }
@@ -175,16 +190,12 @@ class ServerProxy {
       }
 
       pendingWarnings.forEach((value, key) => {
-        const message = {
-          visitor: '',
-          exposureDates: value,
-          room: key,
-        };
-        this.privateMessage(query.room, 'notifyRoom', message);
+        // value must contain destination of message
+        this.privateMessage('notifyRoom', value);
         pendingWarnings.delete(key);
         console.groupCollapsed(`Pending Warnings for ${query.room}:`);
 
-        console.log(warn(JSON.stringify(message, null, 3)));
+        console.log(warn(JSON.stringify(value, null, 3)));
         console.groupEnd();
       });
     }
@@ -202,7 +213,7 @@ class ServerProxy {
         //   exposureDates: value.message,
         //   room: '',
         // };
-        this.privateMessage(query.id, 'exposureAlert', value.message);
+        this.privateMessage('exposureAlert', value.message);
         pendingWarnings.delete(key);
       });
     }
@@ -215,7 +226,6 @@ class ServerProxy {
       this.privateMessage(room, 'notifyRoom', data);
       return `${room} WARNED`;
     } catch (error) {
-      console.groupEnd();
       console.error(error);
       return error;
     } finally {
@@ -246,12 +256,12 @@ class ServerProxy {
   }
 
   // Event Heloers
-  privateMessage(room, event, message) {
-    console.info(`Emitting ${event} to ${room} with:`);
-    console.log('\t', printJson(message));
+  privateMessage(event, message) {
+    console.info(`Emitting ${event} to ${message.room} with:`);
+    console.log(printJson(message));
 
     // note: cannot attach callback to namespace broadcast event
-    this.io.to(room).emit(event, message);
+    this.io.to(message.room).emit(event, message);
   }
 
   roomIdsIncludeSocket(roomName, id) {

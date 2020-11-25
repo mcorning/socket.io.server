@@ -46,8 +46,7 @@ admin.on('connect', (socket) => {
 
 // set up Server Proxy
 const { getNow, printJson, logResults, ServerProxy } = require('./radar');
-let pendingWarnings = new Map();
-const S = new ServerProxy(io, pendingWarnings);
+const S = new ServerProxy(io);
 
 // other utilities
 const clc = require('cli-color');
@@ -132,7 +131,7 @@ io.on('connection', (socket) => {
     }
     onConnection(query);
   } else {
-    console.groupCollapsed('Odd Socket. Disconnecting');
+    console.groupCollapsed(`Odd Socket. Disconnecting ${socket.id}`);
     console.error('socket lacks ID:', socket.handshake.query);
     socket.disconnect(true);
     console.groupEnd();
@@ -153,7 +152,6 @@ io.on('connection', (socket) => {
 
       console.log(`Open Rooms before ${room} opens...`);
       console.log(S.openRooms);
-
       socket.join(room);
 
       console.log(`...and after ${room} opens`);
@@ -166,9 +164,6 @@ io.on('connection', (socket) => {
       console.log(printJson(S.openRooms));
 
       console.log('Emitted exposeOpenRooms event');
-
-      console.log('Pending Warnings:');
-      console.log(printJson([...pendingWarnings]));
 
       // check for pending warnings
       S.handlePendings(socket.handshake.query);
@@ -318,7 +313,7 @@ io.on('connection', (socket) => {
   //#endregion
 
   //#region Warnings and Alerts
-  // Visitor sends this event containing all warnings for all exposed Rooms
+  /* Visitor sends this event containing all warnings for all exposed Rooms
   // Warning data:
   // {
   //    "sentTime": "2020-11-18T16:07:52.336Z",
@@ -337,10 +332,32 @@ io.on('connection', (socket) => {
   //          ]
   //       }
   //    }
-  // }
+// }
+{
+   "sentTime": "2020-11-24T19:52:55.693Z",
+   "visitor": {
+      "$id": "-DfaxawFa31U2rn2AAAB",
+      "visitor": "MichaelUK",
+      "id": "-DfaxawFa31U2rn2AAAB",
+      "nsp": "enduringNet"
+   },
+   "reason": "LCT warned me of possible exposure",
+   "warningsMap": [
+      [
+         "DS301",
+         [
+            "2020-11-24"
+         ]
+      ]
+   ]
+}
+*/
+
+  // sent by Visitor
+  // server handles the Visitor's exposureWarning with a notifyRoom event so Room can take over
   const onExposureWarning = (data, ack) => {
     try {
-      const { visitor, warningsMap } = data;
+      const { visitor, warningsMap, reason } = data;
       console.assert(visitor, 'visitor cannot be empty');
       console.groupCollapsed(
         `[${getNow()}] EVENT: onExposureWarning from [${visitor.visitor}/${
@@ -358,15 +375,23 @@ io.on('connection', (socket) => {
       let results = [];
 
       const warnings = new Map(warningsMap);
+
+      console.group('Mapped Warning data:');
+      console.log(printJson([...warnings]));
       // iterate collection notifying each Room separately
+      // notifyRoom expects this data:
+      // {room, reason, exposureDates, visitor}
       warnings.forEach((exposureDates, room) => {
-        data.event = 'notifyRoom';
-        data.room = { room: room, id: room };
-        data.message = exposureDates;
-        results.push(S.sendOrPend(data));
+        results.push(
+          S.sendOrPend({
+            event: 'notifyRoom',
+            room: room,
+            reason: reason,
+            exposureDates: exposureDates,
+            visitor: visitor.id,
+          })
+        );
       });
-      console.warn('Pending Warnings:');
-      console.warn(printJson([...pendingWarnings]));
 
       if (ack) {
         ack({
@@ -457,7 +482,7 @@ io.on('connection', (socket) => {
   });
   socket.on('exposePendingWarnings', (data, ack) => {
     if (ack) {
-      ack(pendingWarnings);
+      ack(S.pendingWarnings);
     }
   });
   socket.on('exposeAvailableRooms', (data, ack) => {
