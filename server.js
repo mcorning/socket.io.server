@@ -217,12 +217,12 @@ io.on('connection', (socket) => {
   const onEnterRoom = (data, ack) => {
     try {
       const { room, id, nsp, sentTime, visitor } = data;
-      console.groupCollapsed(`[${getNow()}] EVENT: onEnterRoom ${room.room}`);
+      console.groupCollapsed(`[${getNow()}] EVENT: onEnterRoom ${room}`);
 
       // first, ensure the Room is open (note S.rooms returns an object
       // that will include the name of an Open Room after a Room opens its own
       // io room):
-      if (!S.rooms[room.room]) {
+      if (!S.rooms[room]) {
         if (ack) {
           ack({
             error: 'Room must be open before you can enter',
@@ -232,18 +232,18 @@ io.on('connection', (socket) => {
       }
 
       // Enter the Room. As others enter, you will see a notification they, too, joined.
-      socket.join(room.room);
+      socket.join(room);
 
       //S.roomIdsIncludeSocket essentially calls:
       //const result = io.nsps['/'].adapter.rooms
-      // && io.nsps['/'].adapter.rooms[room.room].sockets[socket.id];
-      const assertion = S.roomIdsIncludeSocket(room.room, socket.id);
-      console.assert(assertion, 'Could not enter Room', room.room);
+      // && io.nsps['/'].adapter.rooms[room].sockets[socket.id];
+      const assertion = S.roomIdsIncludeSocket(room, socket.id);
+      console.assert(assertion, 'Could not enter Room', room);
 
       // handled by Room.checkIn()
       // sending to individual socketid (private message)
-      // this emit assumes the room.room is open (and not merely connected)
-      io.to(room.room).emit('checkIn', {
+      // this emit assumes the room is open (and not merely connected)
+      io.to(room).emit('checkIn', {
         visitor: visitor,
         sentTime: sentTime,
         room: room,
@@ -251,9 +251,9 @@ io.on('connection', (socket) => {
         socketId: socket.id,
       });
 
-      const occupants = S.getOccupancy(room.room);
-      console.log(warn(`${room.room} has ${occupants} occupants now:`));
-      console.log(printJson(S.rooms[room.room]));
+      const occupants = S.getOccupancy(room);
+      console.log(warn(`${room} has ${occupants} occupants now:`));
+      console.log(printJson(S.rooms[room]));
       if (occupants) {
         if (ack) {
           ack({
@@ -269,7 +269,7 @@ io.on('connection', (socket) => {
           ack({
             event: 'onEnterRoom',
             room: room,
-            result: `Could not enter Room ${room.room}`,
+            result: `Could not enter Room ${room}`,
             emits: 'nothing',
           });
         }
@@ -283,25 +283,25 @@ io.on('connection', (socket) => {
 
   const onLeaveRoom = (data, ack) => {
     const { room, visitor, sentTime, message } = data;
-    console.groupCollapsed(`[${getNow()}] EVENT: onLeaveRoom ${room.room}`);
-    socket.leave(room.room);
+    console.groupCollapsed(`[${getNow()}] EVENT: onLeaveRoom ${room}`);
+    socket.leave(room);
 
     // handled by Room.checkOut()
     // sending to individual socketid (private message)
-    io.to(room.room).emit('checkOut', {
+    io.to(room).emit('checkOut', {
       visitor: visitor,
       sentTime: sentTime,
       room: room,
       message: message,
     });
 
-    S.updateOccupancy(room.room);
+    S.updateOccupancy(room);
 
     const msg = `Using their own socket ${socket.id}, ${visitor.visitor} ${
-      S.roomIdsIncludeSocket(room.room, socket.handshake.query.id)
+      S.roomIdsIncludeSocket(room, socket.handshake.query.id)
         ? 'did not make it out of'
         : 'made it out of'
-    } Room [${room.room} ${room.id}] on ${getNow()}`;
+    } Room ${room} on ${getNow()}`;
 
     console.log(warn('leaveRoom():', msg));
     if (ack) {
@@ -430,7 +430,7 @@ io.on('connection', (socket) => {
       }
 
       // send or cache the alert
-      console.log(`${room.room} alerting ${visitor.visitor}`);
+      console.log(`${room} alerting ${visitor.visitor}`);
       data.event = 'exposureAlert';
       let result = S.sendOrPend(data);
 

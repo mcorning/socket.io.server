@@ -81,9 +81,9 @@ class ServerProxy {
           id: c[0],
           room: query.room,
           visitor: query.visitor,
-          uniqueName: query.id,
           namespace: query.nsp,
           connected: c[1].connected,
+          occupiedRooms: c[1].rooms,
         };
         a.push(b);
         return a;
@@ -135,20 +135,49 @@ class ServerProxy {
   sendOrPend(data) {
     const { event, reason, visitor, room, exposureDates } = data;
     if (event == 'exposureAlert') {
+      //#region this.visitors data structure
       // Ensure Visitor is online to see alert, otherwise cache and send when they login again
-      if (this.visitors.filter((v) => v.visitor === visitor.visitor).length) {
+      // this.visitors has this structure:
+      // [
+      //   {
+      //     id: '-DfaxawFa31U2rn2AAAB',
+      //     visitor: 'MichaelUK',
+      //     uniqueName: '-DfaxawFa31U2rn2AAAB',
+      //     namespace: 'enduringNet',
+      //     connected: true,
+      //     rooms: {
+      //       '-DfaxawFa31U2rn2AAAB': '-DfaxawFa31U2rn2AAAB',
+      //     },
+      //   },
+      //   {
+      //     id: 'fhcoU6xEF-0wFmCVAAAA',
+      //     visitor: 'MichaelUsa',
+      //     uniqueName: 'fhcoU6xEF-0wFmCVAAAA',
+      //     namespace: 'enduringNet',
+      //     connected: true,
+      //     rooms: {
+      //       'fhcoU6xEF-0wFmCVAAAA': 'fhcoU6xEF-0wFmCVAAAA',
+      //     },
+      //   },
+      // ];
+      // so filter on the strongest predicate: ID
+      // ***** NOTE: this.visitors can be empty only if all Visitors are disconnected
+      // ***** So ensure a Visitor can't press the Warn Rooms button unless their socket is connected
+      //#endregion
+      if (this.visitors.filter((v) => v.id === visitor.id).length) {
         // sending to visitor socket in visitor's room (except sender)
         this.privateMessage(event, data);
-        return `Server: Alerted ${visitor.visitor}/${visitor.id}`;
+
+        return 'ALERTED';
       } else {
         // cache the Visitor warning
         pendingWarnings.set(visitor.id, data);
-        console.warn(`${room} is closed. Caching event.`);
+        console.warn(`${visitor.visitor} is offline. Caching event.`);
         console.group('Pending Warnings');
         console.log(printJson([...pendingWarnings]));
         console.groupEnd();
 
-        return `Server: ${visitor.visitor}/${visitor.id} unavailable. DEFERRED ALERT.`;
+        return 'PENDING';
       }
     }
     if (event == 'notifyRoom') {
@@ -160,20 +189,23 @@ class ServerProxy {
           room: room,
           reason: reason,
           exposureDates: exposureDates,
-          visitor: visitor.id,
+          visitor: visitor,
         });
+
+        return 'WARNED';
       } else {
         pendingWarnings.set(room, {
           room: room,
           reason: reason,
-          visitor: visitor.id,
+          visitor: visitor,
           exposureDates: exposureDates,
         });
         console.warn(`${room} is closed. Caching event.`);
         console.group('Pending Warnings');
         console.log(printJson([...pendingWarnings]));
         console.groupEnd();
-        return `${room} PENDING`;
+
+        return 'PENDING';
       }
     }
   }
@@ -213,7 +245,7 @@ class ServerProxy {
         //   exposureDates: value.message,
         //   room: '',
         // };
-        this.privateMessage('exposureAlert', value.message);
+        this.privateMessage('exposureAlert', value);
         pendingWarnings.delete(key);
       });
     }
