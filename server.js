@@ -526,7 +526,7 @@ io.on('reconnect', (socket) => {
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 11.28.13.54'));
+  console.log(notice('Build: 12.05.01.03'));
   console.log(notice(moment().format('llll')));
   console.log(info(`socket.io server listening on PORT: ${port}`));
   console.log(' ');
