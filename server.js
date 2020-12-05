@@ -65,6 +65,8 @@ const DEBUG = 0;
 
 const { SOURCE, ROOM_TYPE } = require('./types');
 
+let groupLevel = 0;
+
 // helpers
 
 function onConnection(query) {
@@ -73,7 +75,6 @@ function onConnection(query) {
       query.visitor || query.room || query.admin
     }] ${query.state ? query.state : ''}`
   );
-
   let result = S.handlePendings(query);
   query.result = result;
   console.log('Socket Room Pending State:', query.result);
@@ -108,20 +109,9 @@ function onConnection(query) {
 // Heavy lifting below
 //=============================================================================//
 
-io.on('reconnect', (socket) => {
-  // immediately reconnection
-  if (socket.handshake.query.id) {
-    S.handlePendings(socket.handshake.query);
-    console.table(S.sockets);
-  }
-});
-
 // called when a connection changes
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
-  // block undefined Rooms
-
-  // immediately upon connection: check for pending warnings and alerts
   if (query.id) {
     if (query.room && query.state === 'Opened') {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
@@ -130,11 +120,6 @@ io.on('connection', (socket) => {
       console.groupEnd();
     }
     onConnection(query);
-  } else {
-    console.groupCollapsed(`Odd Socket. Disconnecting ${socket.id}`);
-    console.error('socket lacks ID:', socket.handshake.query);
-    socket.disconnect(true);
-    console.groupEnd();
   }
   //...........................................................................//
   //#region Listeners
@@ -151,7 +136,7 @@ io.on('connection', (socket) => {
       console.groupCollapsed(`[${getNow()}] EVENT: onOpenRoom ${room}`);
 
       console.log(`Open Rooms before ${room} opens...`);
-      console.log(S.openRooms);
+      console.log(printJson(S.openRooms));
       socket.join(room);
 
       console.log(`...and after ${room} opens`);
@@ -501,34 +486,43 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.groupCollapsed('Remaining Sockets:');
-    console.warn(printJson(S.sockets));
-    console.groupEnd();
+    console.log(`${socket.id} disconnected`);
+    // console.groupCollapsed('Remaining Sockets:');
+    // console.warn(printJson(S.sockets));
+    // console.groupEnd();
   });
 
   socket.on('disconnecting', (reason) => {
-    const { visitor, room, admin, name, id } = socket.handshake.query;
-    console.groupCollapsed(
-      `[${getNow()}] EVENT: onDisconnecting ${
-        visitor || room || admin
-      } (${id})      )}`
-    );
-    console.warn(
-      getNow(),
-      `Disconnecting Socket ${visitor || room || admin} (${socket.id}) `
-    );
-    if (room) {
-      console.warn(printJson(S.openRooms));
-    }
-    console.warn(`[${getNow()}] ${printJson(Object.keys(socket.rooms))}`);
-    console.warn('\tReason:', reason);
-    console.groupEnd();
+    // const { visitor, room, admin, name, id } = socket.handshake.query;
+    // console.groupCollapsed(
+    //   `[${getNow()}] EVENT: onDisconnecting ${
+    //     visitor || room || admin
+    //   } (${id})      )}`
+    // );
+    // console.warn(
+    //   getNow(),
+    //   `Disconnecting Socket ${visitor || room || admin} (${socket.id}) `
+    // );
+    // if (room) {
+    //   console.warn(printJson(S.openRooms));
+    // }
+    // console.warn(`[${getNow()}] ${printJson(Object.keys(socket.rooms))}`);
+    // console.warn('\tReason:', reason);
+    // console.groupEnd();
   });
 
   socket.on('disconnectAll', () => {
     Object.values(io.sockets.clients().connected).map((v) => v.disconnect());
     console.warn('Remaining connections :>> ', io.sockets.connected);
   });
+});
+
+io.on('reconnect', (socket) => {
+  // immediately reconnection
+  if (socket.handshake.query.id) {
+    S.handlePendings(socket.handshake.query);
+    console.table(S.sockets);
+  }
 });
 
 http.listen(port, function () {
