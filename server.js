@@ -363,6 +363,8 @@ io.on('connection', (socket) => {
 
       console.group('Mapped Warning data:');
       console.log(printJson([...warnings]));
+      console.groupEnd();
+
       // iterate collection notifying each Room separately
       // notifyRoom expects this data:
       // {room, reason, exposureDates, visitor}
@@ -418,6 +420,7 @@ io.on('connection', (socket) => {
       console.log(`${room} alerting ${visitor.visitor}`);
       data.event = 'exposureAlert';
       let result = S.sendOrPend(data);
+      console.groupEnd();
 
       if (ack) {
         ack(result);
@@ -510,11 +513,6 @@ io.on('connection', (socket) => {
     // console.warn('\tReason:', reason);
     // console.groupEnd();
   });
-
-  socket.on('disconnectAll', () => {
-    Object.values(io.sockets.clients().connected).map((v) => v.disconnect());
-    console.warn('Remaining connections :>> ', io.sockets.connected);
-  });
 });
 
 io.on('reconnect', (socket) => {
@@ -526,7 +524,7 @@ io.on('reconnect', (socket) => {
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 12.05.01.03'));
+  console.log(notice('Build: 12.06.14.05'));
   console.log(notice(moment().format('llll')));
   console.log(info(`socket.io server listening on PORT: ${port}`));
   console.log(' ');
