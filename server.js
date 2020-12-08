@@ -73,7 +73,7 @@ function onConnection(query) {
   console.groupCollapsed(
     `[${getNow()}] EVENT: onConnection [${
       query.visitor || query.room || query.admin
-    }] ${query.state ? query.state : ''}`
+    } / ${query.id}] ${query.state ? query.state : ''}`
   );
   let result = S.handlePendings(query);
   query.result = result;
@@ -131,15 +131,31 @@ io.on('connection', (socket) => {
   // next step in the pipeline is to access pending Visitor exposure warnings
   const onOpenRoom = (data, ack) => {
     try {
-      const { room, id } = data;
+      // const { room, id } = data;
+      const { room, id, closed } = socket.handshake.query;
+
+      // if Room is already open, return
+      if (S.isOpen(id)) {
+        console.log(
+          `${room} is already open. No further processing necessary.`
+        );
+        return;
+      }
+
+      if (!room) {
+        console.error(
+          'This is not an LCT socket. No further processing possible.'
+        );
+        return;
+      }
       // console.log(message, socket.handshake.query);
-      console.groupCollapsed(`[${getNow()}] EVENT: onOpenRoom ${room}`);
+      console.groupCollapsed(`[${getNow()}] EVENT: onOpenRoom ${data.room}`);
 
-      console.log(`Open Rooms before ${room} opens...`);
+      console.log(`Open Rooms before ${data.room} opens...`);
       console.log(printJson(S.openRooms));
-      socket.join(room);
+      socket.join(data.room);
 
-      console.log(`...and after ${room} opens`);
+      console.log(`...and after ${data.room} opens`);
       console.log(printJson(S.exposeOpenRooms()));
       console.log('Sockets');
       console.log(printJson(S.sockets));
@@ -153,12 +169,12 @@ io.on('connection', (socket) => {
       // check for pending warnings
       S.handlePendings(socket.handshake.query);
       // if this checks for connection, why not check Room connected property?
-      const assertion = S.roomIdsIncludeSocket(room, id);
+      const assertion = S.roomIdsIncludeSocket(data.room, id);
 
-      console.assert(assertion, `${id} unable to join ${room}`);
+      console.assert(assertion, `${id} unable to join ${data.room}`);
 
       if (ack) {
-        ack({ event: 'onOpenRoom', room: room, result: assertion });
+        ack({ event: 'onOpenRoom', room: data.room, result: assertion });
       }
     } catch (error) {
       console.error('Oops, onOpenRoom() hit this:', error.message);
@@ -488,8 +504,13 @@ io.on('connection', (socket) => {
     if (ack) ack(`Server is at your disposal, ${data}`);
   });
 
-  socket.on('disconnect', () => {
-    console.log(`${socket.id} disconnected`);
+  socket.on('disconnect', (reason) => {
+    console.warn(
+      `[${getNow()}] EVENT: disconnect: ${socket.id}/${
+        socket.handshake.query.visitor || socket.handshake.query.room
+      } disconnected. Reason:
+       ${reason}`
+    );
     // console.groupCollapsed('Remaining Sockets:');
     // console.warn(printJson(S.sockets));
     // console.groupEnd();

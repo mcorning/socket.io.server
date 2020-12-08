@@ -124,6 +124,10 @@ class ServerProxy {
     return a.filter((v) => o[v.room]);
   }
 
+  isOpen(id) {
+    return this.openRooms.filter((v) => v.id == id).length;
+  }
+
   getOccupancy(room) {
     if (!room) {
       throw 'No room name specified';
