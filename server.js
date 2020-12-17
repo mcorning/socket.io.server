@@ -73,12 +73,12 @@ function onConnection(query) {
   console.groupCollapsed(
     `[${getNow()}] EVENT: onConnection [${
       query.visitor || query.room || query.admin
-    } / ${query.id}] ${query.state ? query.state : ''}`
+    } / ${query.id}] ${query.closed ? 'Closed' : 'Open'}`
   );
   let result = S.handlePendings(query);
   query.result = result;
   console.log('Socket Room Pending State:', query.result);
-  console.log('Socket Room State:', query.state);
+  console.log('Socket Room State:', query.closed ? 'Closed' : 'Open');
 
   console.group('Sockets:');
   console.log(printJson(S.sockets));
@@ -113,7 +113,7 @@ function onConnection(query) {
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
   if (query.id) {
-    if (query.room && query.state === 'Opened') {
+    if (query.room && !query.closed) {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
       socket.join(query.room);
       console.log('Open Rooms:', printJson(S.exposeOpenRooms()));
@@ -132,13 +132,21 @@ io.on('connection', (socket) => {
   const onOpenRoom = (data, ack) => {
     try {
       // const { room, id } = data;
-      const { room, id, closed } = socket.handshake.query;
+      const { room, id } = socket.handshake.query;
 
       // if Room is already open, return
       if (S.isOpen(id)) {
         console.log(
           `${room} is already open. No further processing necessary.`
         );
+        if (ack) {
+          ack({
+            event: 'onOpenRoom',
+            room: data.room,
+            state: 'Reopened',
+            result: true,
+          });
+        }
         return;
       }
 
@@ -174,7 +182,12 @@ io.on('connection', (socket) => {
       console.assert(assertion, `${id} unable to join ${data.room}`);
 
       if (ack) {
-        ack({ event: 'onOpenRoom', room: data.room, result: assertion });
+        ack({
+          event: 'onOpenRoom',
+          room: data.room,
+          state: 'Opened',
+          result: assertion,
+        });
       }
     } catch (error) {
       console.error('Oops, onOpenRoom() hit this:', error.message);
@@ -511,29 +524,9 @@ io.on('connection', (socket) => {
       } disconnected. Reason:
        ${reason}`
     );
-    // console.groupCollapsed('Remaining Sockets:');
-    // console.warn(printJson(S.sockets));
-    // console.groupEnd();
   });
 
-  socket.on('disconnecting', (reason) => {
-    // const { visitor, room, admin, name, id } = socket.handshake.query;
-    // console.groupCollapsed(
-    //   `[${getNow()}] EVENT: onDisconnecting ${
-    //     visitor || room || admin
-    //   } (${id})      )}`
-    // );
-    // console.warn(
-    //   getNow(),
-    //   `Disconnecting Socket ${visitor || room || admin} (${socket.id}) `
-    // );
-    // if (room) {
-    //   console.warn(printJson(S.openRooms));
-    // }
-    // console.warn(`[${getNow()}] ${printJson(Object.keys(socket.rooms))}`);
-    // console.warn('\tReason:', reason);
-    // console.groupEnd();
-  });
+  socket.on('disconnecting', (reason) => {});
 });
 
 io.on('reconnect', (socket) => {
@@ -545,7 +538,7 @@ io.on('reconnect', (socket) => {
 });
 
 http.listen(port, function () {
-  console.log(notice('Build: 12.07.17.57'));
+  console.log(notice('Build: 12.17.15.15'));
   console.log(notice(moment().format('llll')));
   console.log(info(`socket.io server listening on PORT: ${port}`));
   console.log(' ');

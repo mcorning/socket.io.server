@@ -219,8 +219,13 @@ class ServerProxy {
 
     // handle Room
     if (query.room) {
+      // record Room state
+      query.closed = this.isOpen(query.id);
+
       if (!pendingWarnings.has(query.room)) {
-        let msg = `Nothing pending for ${query.room}`;
+        let msg = `Nothing pending for ${query.room} (which is ${
+          query.closed ? 'closed' : 'open'
+        }).`;
         console.log(msg);
         return msg;
       }
