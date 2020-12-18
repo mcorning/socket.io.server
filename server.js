@@ -78,19 +78,6 @@ function onConnection(query) {
   let result = S.handlePendings(query);
   query.result = result;
   console.log('Socket Room Pending State:', query.result);
-  console.log('Socket Room State:', query.closed ? 'Closed' : 'Open');
-
-  console.group('Sockets:');
-  console.log(printJson(S.sockets));
-  console.groupEnd();
-
-  console.group('Available Rooms:');
-  console.log(printJson(S.available));
-  console.groupEnd();
-
-  console.group('Rooms:');
-  console.log(printJson(S.rooms));
-  console.groupEnd();
 
   console.group('Open Rooms:');
   console.log(printJson(S.openRooms));
@@ -99,6 +86,18 @@ function onConnection(query) {
   console.group('Visitors:');
   console.log(printJson(S.visitors));
   console.groupEnd();
+
+  // console.group('Sockets:');
+  // console.log(printJson(S.sockets));
+  // console.groupEnd();
+
+  console.group('Available Rooms:');
+  console.log(printJson(S.available));
+  console.groupEnd();
+
+  // console.group('Rooms:');
+  // console.log(printJson(S.rooms));
+  // console.groupEnd();
 
   console.groupEnd();
   S.exposeOpenRooms();
@@ -114,7 +113,7 @@ io.on('connection', (socket) => {
   const query = socket.handshake.query;
   console.log(
     success(`
-  [${getNow()}] Handling a connection`)
+[${getNow()}] Handling a connection`)
   );
   if (query.id) {
     if (query.room && !query.closed) {
@@ -168,18 +167,22 @@ io.on('connection', (socket) => {
       socket.join(data.room);
 
       console.log(`...and after ${data.room} opens`);
-      console.log(printJson(S.exposeOpenRooms()));
-      console.log('Sockets');
-      console.log(printJson(S.sockets));
-      console.log('Available');
-      console.log(printJson(S.available));
-      console.log('Rooms');
-      console.log(printJson(S.openRooms));
 
+      console.log(printJson(S.exposeOpenRooms()));
       console.log('Emitted exposeOpenRooms event');
 
+      console.log('Visitors');
+      console.log(printJson(S.visitors));
+
+      // console.log('Available');
+      // console.log(printJson(S.available));
+      // console.log('Rooms');
+      // console.log(printJson(S.openRooms));
+
+      console.log('Checking for pending warnings...');
+
       // check for pending warnings
-      S.handlePendings(socket.handshake.query);
+      console.log('...', S.handlePendings(socket.handshake.query));
       // if this checks for connection, why not check Room connected property?
       const assertion = S.roomIdsIncludeSocket(data.room, id);
 
