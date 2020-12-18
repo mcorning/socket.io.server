@@ -71,9 +71,9 @@ let groupLevel = 0;
 
 function onConnection(query) {
   console.groupCollapsed(
-    `[${getNow()}] EVENT: onConnection [${
-      query.visitor || query.room || query.admin
-    } / ${query.id}] ${query.closed ? 'Closed' : 'Open'}`
+    `EVENT: onConnection [${query.visitor || query.room || query.admin} / ${
+      query.id
+    }] ${query.closed ? 'Closed' : 'Open'}`
   );
   let result = S.handlePendings(query);
   query.result = result;
@@ -112,6 +112,10 @@ function onConnection(query) {
 // called when a connection changes
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
+  console.log(
+    success(`
+  [${getNow()}] Handling a connection`)
+  );
   if (query.id) {
     if (query.room && !query.closed) {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
