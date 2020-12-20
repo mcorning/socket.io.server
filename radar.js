@@ -215,6 +215,8 @@ class ServerProxy {
   }
 
   handlePendings(query) {
+    console.log('Checking for pending warnings...');
+
     console.log('Pending Warnings:', printJson([...pendingWarnings]));
 
     // handle Room
@@ -223,7 +225,7 @@ class ServerProxy {
       query.closed = this.isOpen(query.id);
 
       if (!pendingWarnings.has(query.room)) {
-        let msg = `Nothing pending for ${query.room} (which is ${
+        let msg = `...Nothing pending for ${query.room} (which is ${
           this.isOpen(query.id) ? 'open' : 'closed'
         }).`;
         console.log(msg);
@@ -243,7 +245,7 @@ class ServerProxy {
     // handle Visitor or Admin
     else if (query.visitor || query.admin) {
       if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
-        let msg = `Nothing pending for ${query.visitor}`;
+        let msg = `...Nothing pending for Visitor ${query.visitor}`;
         console.log(msg);
         return msg;
       }

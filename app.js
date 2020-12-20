@@ -1,28 +1,24 @@
-// jshint esversion: 6
+const http = require("http");
 
-// express code
+// const hostname = "192.168.4.22";
+const hostname = "localhost";
+const port = process.env.PORT || 3003;
 
-const express = require("express");
-const app = express();
-
-const http = require("http").Server(app);
-
-app.use(express.static(__dirname));
-
-app.get("/", function (req, res) {
-  res.sendFile(__dirname + "/index.html");
+const server = http.createServer((req, res) => {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/plain");
+  res.end("Hello World");
 });
+
+const url = require("url");
+const base64id = require("base64id");
+
 process.on("uncaughtException", (err) => {
   console.error("There was an uncaught error", err);
   process.exit(1); //mandatory (as per the Node.js docs)
 });
-// end express code
 
-// setup Socket.io Server and Proxy
-const url = require("url");
-const base64id = require("base64id");
-const port = process.env.PORT || 3003;
-const io = require("socket.io")(http);
+const io = require("socket.io")(server);
 // overload to use passed in ID as socket.id
 io.engine.generateId = (req) => {
   const parsedUrl = new url.parse(req.url);
@@ -34,6 +30,7 @@ io.engine.generateId = (req) => {
   }
   return base64id.generateId();
 };
+
 //#region Code
 
 //#region Admin tests: code to be extended soon
@@ -171,7 +168,7 @@ io.on("connection", (socket) => {
       console.log(`...and after ${data.room} opens`);
 
       console.log(printJson(S.exposeOpenRooms()));
-      console.log("Emitted exposeOpenRooms event");
+      console.log("Emitted exposeOpenRooms event ");
 
       console.log("Visitors");
       console.log(printJson(S.visitors));
@@ -207,15 +204,15 @@ io.on("connection", (socket) => {
     try {
       const { room, id, nsp } = data;
       console.groupCollapsed(`[${getNow()}] EVENT: onCloseRoom [${room}]`);
-      console.log(`Rooms before ${room} closing...`);
+      console.log(`Rooms before closing ${room}...`);
       console.log(printJson(S.openRooms));
       socket.leave(room);
-      console.log(`...after ${room} closing`);
-      console.log(printJson(S.openRooms));
-      console.log("Sockets");
-      console.log(printJson(S.sockets));
-      console.log("Rooms");
-      console.log(printJson(S.openRooms));
+      console.log(`...after closing ${room}. `);
+      console.log(printJson(S.exposeOpenRooms()));
+      // console.log("Sockets");
+      // console.log(printJson(S.sockets));
+      // console.log("Rooms");
+      // console.log(printJson(S.rooms));
 
       // if this checks for connection, why not check Room connected property?
       const assertion = !S.roomIdsIncludeSocket(room, id);
@@ -547,10 +544,10 @@ io.on("reconnect", (socket) => {
 
 //#endregion
 
-http.listen(port, function () {
-  let hostname = "http://localhost";
-  console.log(info("Build: 12.18.12.24"));
+server.listen(port, hostname, () => {
+  //http://192.168.4.22:8081/
+  console.log(info("Build: 12.20.14.40"));
   console.log(info(moment().format("llll")));
-  console.log(info(`socket.io server listening on: ${hostname}:${port}`));
+  console.log(`Server running at http://${hostname}:${port}/`);
   console.log(" ");
 });
