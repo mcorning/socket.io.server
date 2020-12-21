@@ -210,16 +210,28 @@ io.on("connection", (socket) => {
   const onCloseRoom = function (data, ack) {
     try {
       const { room, id, nsp } = data;
-      console.groupCollapsed(`[${getNow()}] EVENT: onCloseRoom [${room}]`);
+      console.group(`[${getNow()}] EVENT: onCloseRoom [${room}]`);
+
       console.log(`Rooms before ${room} closing...`);
       console.log(printJson(S.openRooms));
+
+      console.group(Occupants);
+      console.log("Occupants of Room before closing...");
+      console.log(printJson(S.rooms[room]));
+
       socket.leave(room);
+
+      console.log("...and after Room closing:");
+      console.log(printJson(S.rooms[room]));
+      console.groupEnd();
+
       console.log(`...after ${room} closing`);
       console.log(printJson(S.openRooms));
       console.log("Sockets");
       console.log(printJson(S.sockets));
-      console.log("Rooms");
-      console.log(printJson(S.openRooms));
+      console.log("Open Rooms");
+      console.log(printJson(S.exposeOpenRooms()));
+      console.log("Emitted exposeOpenRooms event");
 
       // if this checks for connection, why not check Room connected property?
       const assertion = !S.roomIdsIncludeSocket(room, id);
