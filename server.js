@@ -128,7 +128,7 @@ io.on("connection", (socket) => {
     console.log(
       error(`Unknown socket ${socket.id} (probably from client refresh).`)
     );
-    console.log(printJson(socket));
+    console.log(socket);
 
     socket.disconnect(true);
   }
