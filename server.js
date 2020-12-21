@@ -62,11 +62,8 @@ const highlight = clc.magenta;
 const bold = clc.bold;
 
 const moment = require("moment");
-const DEBUG = 0;
 
-const { SOURCE, ROOM_TYPE } = require("./types");
-
-let groupLevel = 0;
+const { version } = require("./package.json");
 
 // helpers
 
@@ -104,6 +101,12 @@ function onConnection(query) {
   S.exposeOpenRooms();
 }
 
+function newSection(text) {
+  console.log(
+    success(`
+[${getNow()}] ${text}`)
+  );
+}
 // end helpers
 
 // Heavy lifting below
@@ -112,10 +115,7 @@ function onConnection(query) {
 // called when a connection changes
 io.on("connection", (socket) => {
   const query = socket.handshake.query;
-  console.log(
-    success(`
-[${getNow()}] Handling a connection`)
-  );
+  newSection(`Handling a connection to ${socket.id}`);
   if (query.id) {
     if (query.room && !query.closed) {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
@@ -124,7 +124,11 @@ io.on("connection", (socket) => {
       console.groupEnd();
     }
     onConnection(query);
+  } else {
+    console.log(error("Unknown socket (probably from client refresh)."));
+    socket.disconnect(true);
   }
+
   //...........................................................................//
   //#region Listeners
 
@@ -549,7 +553,7 @@ io.on("reconnect", (socket) => {
 
 http.listen(port, function () {
   let hostname = "http://localhost";
-  console.log(info("Build: 12.18.12.24"));
+  console.log(info(`Server.js Build: ${version}`));
   console.log(info(moment().format("llll")));
   console.log(info(`socket.io server listening on: ${hostname}:${port}`));
   console.log(" ");

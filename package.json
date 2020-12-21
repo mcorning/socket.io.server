@@ -1,6 +1,6 @@
 {
   "name": "socket.io.server",
-  "version": "1.0.0",
+  "version": "12.20.17.46",
   "description": "",
   "main": "app.js",
   "keywords": [],
@@ -18,6 +18,7 @@
   },
   "scripts": {
     "startApp": "node app",
+    "startServer": "node server",
     "monitor": "nodemon app"
   }
 }

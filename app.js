@@ -136,8 +136,10 @@ io.on("connection", (socket) => {
       const { room, id } = socket.handshake.query;
 
       if (!room) {
-        console.error(
-          `${id} is not an LCT Room socket. No further processing possible.`
+        console.log(
+          error(
+            `${id} is not an LCT Room socket. No further processing possible.`
+          )
         );
         return;
       }
@@ -200,6 +202,7 @@ io.on("connection", (socket) => {
     }
   };
 
+  // If Room closes, all occupants must leave the Room first
   const onCloseRoom = function (data, ack) {
     try {
       const { room, id, nsp } = data;
@@ -546,7 +549,7 @@ io.on("reconnect", (socket) => {
 
 server.listen(port, hostname, () => {
   //http://192.168.4.22:8081/
-  console.log(info("Build: 12.20.14.40"));
+  console.log(info("App.js Build: 12.20.14.40"));
   console.log(info(moment().format("llll")));
   console.log(`Server running at http://${hostname}:${port}/`);
   console.log(" ");
