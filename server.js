@@ -549,9 +549,15 @@ io.on("connection", (socket) => {
       } disconnected. Reason:
        ${reason}`
     );
+    console.log(`onDisconnect: Sockets at ${getNow()}:`);
+    console.log(S.rawSockets);
   });
 
-  socket.on("disconnecting", (reason) => {});
+  socket.on("disconnecting", (reason) => {
+    console.log("Disconnecting");
+    console.log(`Sockets at ${getNow()}:`);
+    console.log(S.rawSockets);
+  });
 });
 
 io.on("reconnect", (socket) => {
