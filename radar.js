@@ -1,18 +1,18 @@
-const moment = require('moment');
-const { SOURCE, ROOM_TYPE } = require('./types');
+const moment = require("moment");
+const { SOURCE, ROOM_TYPE } = require("./types");
 
-const clc = require('cli-color');
+const clc = require("cli-color");
 const success = clc.red.green;
 const error = clc.red.bold;
 const warn = clc.yellow;
 const info = clc.cyan;
 const highlight = clc.magenta;
 // globals
-let namespace = '/';
+let namespace = "/";
 let pendingWarnings = new Map();
 
 const getNow = () => {
-  return moment().format('HH:mm:ss');
+  return moment().format("HH:mm:ss");
 };
 
 function printJson(json) {
@@ -21,15 +21,15 @@ function printJson(json) {
 
 const logResults = (function () {
   let logResults = [];
-  let title = 'Log Results';
+  let title = "Log Results";
   let collapsed = true;
 
   function entry(message) {
     {
-      this.time = moment().format('HH:MM:SS');
+      this.time = moment().format("HH:MM:SS");
       this.message = message.text;
       this.level = message.level || 0;
-      this.type = message.type || 'output';
+      this.type = message.type || "output";
     }
   }
 
@@ -124,13 +124,17 @@ class ServerProxy {
     return a.filter((v) => o[v.room]);
   }
 
+  getSocket(id) {
+    return this.io.nsps[namespace].adapter.nsp.sockets[id];
+  }
+
   isOpen(id) {
     return this.openRooms.filter((v) => v.id == id).length;
   }
 
   getOccupancy(room) {
     if (!room) {
-      throw 'No room name specified';
+      throw "No room name specified";
     }
     return this.rooms[room].length;
   }
@@ -138,7 +142,7 @@ class ServerProxy {
   // called by server.onExposureWarning and server.onAlertVisitor
   sendOrPend(data) {
     const { event, reason, visitor, room, exposureDates } = data;
-    if (event == 'exposureAlert') {
+    if (event == "exposureAlert") {
       //#region this.visitors data structure
       // Ensure Visitor is online to see alert, otherwise cache and send when they login again
       // this.visitors has this structure:
@@ -172,19 +176,19 @@ class ServerProxy {
         // sending to visitor socket in visitor's room (except sender)
         this.privateMessage(event, data);
 
-        return 'ALERTED';
+        return "ALERTED";
       } else {
         // cache the Visitor warning
         pendingWarnings.set(visitor.id, data);
         console.warn(`${visitor.visitor} is offline. Caching event.`);
-        console.group('Pending Warnings');
+        console.group("Pending Warnings");
         console.log(printJson([...pendingWarnings]));
         console.groupEnd();
 
-        return 'PENDING';
+        return "PENDING";
       }
     }
-    if (event == 'notifyRoom') {
+    if (event == "notifyRoom") {
       // notifyRoom expects this data:
       // {room, reason, exposureDates, visitor}
 
@@ -196,7 +200,7 @@ class ServerProxy {
           visitor: visitor,
         });
 
-        return 'WARNED';
+        return "WARNED";
       } else {
         pendingWarnings.set(room, {
           room: room,
@@ -205,19 +209,19 @@ class ServerProxy {
           exposureDates: exposureDates,
         });
         console.warn(`${room} is closed. Caching event.`);
-        console.group('Pending Warnings');
+        console.group("Pending Warnings");
         console.log(printJson([...pendingWarnings]));
         console.groupEnd();
 
-        return 'PENDING';
+        return "PENDING";
       }
     }
   }
 
   handlePendings(query) {
-    console.log('Checking for pending warnings...');
+    console.log("Checking for pending warnings...");
 
-    console.log('Pending Warnings:', printJson([...pendingWarnings]));
+    console.log("Pending Warnings:", printJson([...pendingWarnings]));
 
     // handle Room
     if (query.room) {
@@ -226,7 +230,7 @@ class ServerProxy {
 
       if (!pendingWarnings.has(query.room)) {
         let msg = `...Nothing pending for ${query.room} (which is ${
-          this.isOpen(query.id) ? 'open' : 'closed'
+          this.isOpen(query.id) ? "open" : "closed"
         }).`;
         console.log(msg);
         return msg;
@@ -234,7 +238,7 @@ class ServerProxy {
 
       pendingWarnings.forEach((value, key) => {
         // value must contain destination of message
-        this.privateMessage('notifyRoom', value);
+        this.privateMessage("notifyRoom", value);
         pendingWarnings.delete(key);
         console.groupCollapsed(`Pending Warnings for ${query.room}:`);
 
@@ -256,7 +260,7 @@ class ServerProxy {
         //   exposureDates: value.message,
         //   room: '',
         // };
-        this.privateMessage('exposureAlert', value);
+        this.privateMessage("exposureAlert", value);
         pendingWarnings.delete(key);
       });
     }
@@ -266,7 +270,7 @@ class ServerProxy {
     const { room } = data;
     try {
       console.group(`[${getNow()}] EVENT: notifyRoom from ${room}`);
-      this.privateMessage(room, 'notifyRoom', data);
+      this.privateMessage(room, "notifyRoom", data);
       return `${room} WARNED`;
     } catch (error) {
       console.error(error);
@@ -283,13 +287,13 @@ class ServerProxy {
     }
 
     if (query.admin || query.visitor || query.room) {
-      console.log(' ');
+      console.log(" ");
       console.log(
         highlight(
-          moment().format('HH:mm:ss'),
-          'In connection handler: Opening connection to a Room for:',
+          moment().format("HH:mm:ss"),
+          "In connection handler: Opening connection to a Room for:",
           query.admin || query.visitor || query.room,
-          'using socketId:',
+          "using socketId:",
           query.id
         )
       );
@@ -313,7 +317,7 @@ class ServerProxy {
       return result;
     } catch (error) {
       console.error(error);
-      console.log('Returning false');
+      console.log("Returning false");
       return false;
     }
   }
@@ -327,18 +331,18 @@ class ServerProxy {
 
   exposeOpenRooms() {
     const openRooms = this.openRooms;
-    this.io.of(namespace).emit('openRoomsExposed', openRooms);
+    this.io.of(namespace).emit("openRoomsExposed", openRooms);
     return openRooms;
   }
   exposeAvailableRooms() {
-    this.io.of(namespace).emit('availableRoomsExposed', this.available);
+    this.io.of(namespace).emit("availableRoomsExposed", this.available);
   }
 
   updateOccupancy(room) {
     if (room && this.rooms[room]) {
       let occupancy = this.rooms.length || 0;
       // sending to all clients in namespace 'myNamespace', including sender
-      this.io.of(namespace).emit('updatedOccupancy', {
+      this.io.of(namespace).emit("updatedOccupancy", {
         room: room,
         occupancy: occupancy,
       });

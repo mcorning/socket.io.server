@@ -215,11 +215,13 @@ io.on("connection", (socket) => {
       console.log(`Rooms before ${room} closing...`);
       console.log(printJson(S.openRooms));
 
-      console.group(Occupants);
+      console.group("Occupants");
       console.log("Occupants of Room before closing...");
       console.log(printJson(S.rooms[room]));
 
-      socket.leave(room);
+      Object.keys(S.rooms[room].sockets).forEach((value) => {
+        S.getSocket(value).leave(room);
+      });
 
       console.log("...and after Room closing:");
       console.log(printJson(S.rooms[room]));
