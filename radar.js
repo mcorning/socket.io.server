@@ -12,7 +12,7 @@ let namespace = "/";
 let pendingWarnings = new Map();
 
 const getNow = () => {
-  return moment().format("HH:mm:ss");
+  return moment().format("HH:mm:SSS:");
 };
 
 function printJson(json) {
