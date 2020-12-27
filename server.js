@@ -2,55 +2,59 @@
 
 // express code
 
-const express = require("express");
+const express = require('express');
 const app = express();
 
-const http = require("http").Server(app);
+const http = require('http').Server(app);
 
 app.use(express.static(__dirname));
 
-app.get("/", function (req, res) {
-  res.sendFile(__dirname + "/index.html");
+app.get('/', function (req, res) {
+  res.sendFile(__dirname + '/index.html');
 });
-process.on("uncaughtException", (err) => {
-  console.error("There was an uncaught error", err);
+process.on('uncaughtException', (err) => {
+  console.error('There was an uncaught error', err);
   process.exit(1); //mandatory (as per the Node.js docs)
 });
 // end express code
 
 // setup Socket.io Server and Proxy
-const url = require("url");
-const base64id = require("base64id");
+const url = require('url');
+const base64id = require('base64id');
 const port = process.env.PORT || 3003;
-const io = require("socket.io")(http);
+const io = require('socket.io')(http);
 // overload to use passed in ID as socket.id
 io.engine.generateId = (req) => {
   const parsedUrl = new url.parse(req.url);
   const params = new URLSearchParams(parsedUrl.search);
-  const prevId = params.get("id");
+  const prevId = params.get('id');
   // prevId is either a valid id or an empty string
   if (prevId) {
+    console.log('prevId:', prevId);
     return prevId;
   }
-  return base64id.generateId();
+  const id = base64id.generateId();
+  console.log('new ID:', id);
+
+  return null;
 };
 //#region Code
 
 //#region Admin tests: code to be extended soon
-const admin = io.of("/admin");
-admin.on("connect", (socket) => {
-  console.warn("admin socket.id:", socket.id);
+const admin = io.of('/admin');
+admin.on('connect', (socket) => {
+  console.warn('admin socket.id:', socket.id);
 
-  socket.on("message", (data) => console.log(data));
+  socket.on('message', (data) => console.log(data));
 });
 //#endregion
 
 // set up Server Proxy
-const { getNow, printJson, logResults, ServerProxy } = require("./radar");
+const { getNow, printJson, logResults, ServerProxy } = require('./radar');
 const S = new ServerProxy(io);
 
 // other utilities
-const clc = require("cli-color");
+const clc = require('cli-color');
 const success = clc.red.green;
 const colorExposureAlert = clc.green;
 const colorExposureWarning = clc.yellow.red;
@@ -61,9 +65,9 @@ const notice = clc.blue;
 const highlight = clc.magenta;
 const bold = clc.bold;
 
-const moment = require("moment");
+const moment = require('moment');
 
-const { version } = require("./package.json");
+const { version } = require('./package.json');
 
 // helpers
 
@@ -71,17 +75,17 @@ function onConnection(query) {
   console.groupCollapsed(
     `EVENT: onConnection [${query.visitor || query.room || query.admin} / ${
       query.id
-    }] ${query.closed ? "Closed" : "Open"}`
+    }] ${query.closed ? 'Closed' : 'Open'}`
   );
   let result = S.handlePendings(query);
   query.result = result;
-  console.log("Socket Room Pending State:", query.result);
+  console.log('Socket Room Pending State:', query.result);
 
-  console.group("Open Rooms:");
+  console.group('Open Rooms:');
   console.log(printJson(S.openRooms));
   console.groupEnd();
 
-  console.group("Visitors:");
+  console.group('Visitors:');
   console.log(printJson(S.visitors));
   console.groupEnd();
 
@@ -89,7 +93,7 @@ function onConnection(query) {
   // console.log(printJson(S.sockets));
   // console.groupEnd();
 
-  console.group("Available Rooms:");
+  console.group('Available Rooms:');
   console.log(printJson(S.available));
   console.groupEnd();
 
@@ -113,14 +117,21 @@ function newSection(text) {
 //=============================================================================//
 
 // called when a connection changes
-io.on("connection", (socket) => {
+io.on('connection', (socket) => {
+  if (!socket.id) {
+    socket.disconnect(true);
+  }
   const query = socket.handshake.query;
   newSection(`Handling a connection to ${socket.id}`);
+
   if (query.id) {
+    if (query.id != socket.id) {
+      console.error(`Socket.id ${socket.id} != query.id ${query.id}`);
+    }
     if (query.room && !query.closed) {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
       socket.join(query.room);
-      console.log("Open Rooms:", printJson(S.exposeOpenRooms()));
+      console.log('Open Rooms:', printJson(S.exposeOpenRooms()));
       console.groupEnd();
     }
     onConnection(query);
@@ -160,9 +171,9 @@ io.on("connection", (socket) => {
         );
         if (ack) {
           ack({
-            event: "onOpenRoom",
+            event: 'onOpenRoom',
             room: data.room,
-            state: "Reopened",
+            state: 'Reopened',
             result: true,
           });
         }
@@ -179,9 +190,9 @@ io.on("connection", (socket) => {
       console.log(`...and after ${data.room} opens`);
 
       console.log(printJson(S.exposeOpenRooms()));
-      console.log("Emitted exposeOpenRooms event");
+      console.log('Emitted exposeOpenRooms event');
 
-      console.log("Visitors");
+      console.log('Visitors');
       console.log(printJson(S.visitors));
 
       // console.log('Available');
@@ -190,7 +201,7 @@ io.on("connection", (socket) => {
       // console.log(printJson(S.openRooms));
 
       // check for pending warnings
-      console.log("...", S.handlePendings(socket.handshake.query));
+      console.log('...', S.handlePendings(socket.handshake.query));
       // if this checks for connection, why not check Room connected property?
       const assertion = S.roomIdsIncludeSocket(data.room, id);
 
@@ -198,14 +209,14 @@ io.on("connection", (socket) => {
 
       if (ack) {
         ack({
-          event: "onOpenRoom",
+          event: 'onOpenRoom',
           room: data.room,
-          state: "Opened",
+          state: 'Opened',
           result: assertion,
         });
       }
     } catch (error) {
-      console.error("Oops, onOpenRoom() hit this:", error.message);
+      console.error('Oops, onOpenRoom() hit this:', error.message);
     } finally {
       console.groupEnd();
     }
@@ -219,25 +230,27 @@ io.on("connection", (socket) => {
       console.log(`Rooms before ${room} closing...`);
       console.log(printJson(S.openRooms));
 
-      console.group("Occupants");
-      console.log("Occupants of Room before closing...");
-      console.log(printJson(S.rooms[room]));
+      if (S.rooms[room]) {
+        console.group('Occupants');
+        console.log('Occupants of Room before closing...');
+        console.log(printJson(S.rooms[room]));
 
-      Object.keys(S.rooms[room].sockets).forEach((value) => {
-        S.getSocket(value).leave(room);
-      });
+        Object.keys(S.rooms[room].sockets).forEach((value) => {
+          S.getSocket(value).leave(room);
+        });
 
-      console.log("...and after Room closing:");
-      console.log(printJson(S.rooms[room]));
-      console.groupEnd();
+        console.log('...and after Room closing:');
+        console.log(printJson(S.rooms[room]));
+        console.groupEnd();
+      }
 
       console.log(`...after ${room} closing`);
       console.log(printJson(S.openRooms));
-      console.log("Sockets");
+      console.log('Sockets');
       console.log(printJson(S.sockets));
-      console.log("Open Rooms");
+      console.log('Open Rooms');
       console.log(printJson(S.exposeOpenRooms()));
-      console.log("Emitted exposeOpenRooms event");
+      console.log('Emitted exposeOpenRooms event');
 
       // if this checks for connection, why not check Room connected property?
       const assertion = !S.roomIdsIncludeSocket(room, id);
@@ -245,10 +258,10 @@ io.on("connection", (socket) => {
       console.assert(assertion, `${id} unable to leave ${room}`);
 
       if (ack) {
-        ack({ event: "onCloseRoom", room: room, result: assertion });
+        ack({ event: 'onCloseRoom', room: room, result: assertion });
       }
     } catch (error) {
-      console.error("Oops, closeRoom() hit this:", error.message);
+      console.error('Oops, closeRoom() hit this:', error.message);
     } finally {
       console.groupEnd();
     }
@@ -268,8 +281,8 @@ io.on("connection", (socket) => {
       if (!S.rooms[room]) {
         if (ack) {
           ack({
-            error: "Room must be open before you can enter",
-            on: "server.onEnterRoom",
+            error: 'Room must be open before you can enter',
+            on: 'server.onEnterRoom',
           });
         }
       }
@@ -281,16 +294,16 @@ io.on("connection", (socket) => {
       //const result = io.nsps['/'].adapter.rooms
       // && io.nsps['/'].adapter.rooms[room].sockets[socket.id];
       const assertion = S.roomIdsIncludeSocket(room, socket.id);
-      console.assert(assertion, "Could not enter Room", room);
+      console.assert(assertion, 'Could not enter Room', room);
 
       // handled by Room.checkIn()
       // sending to individual socketid (private message)
       // this emit assumes the room is open (and not merely connected)
-      io.to(room).emit("checkIn", {
+      io.to(room).emit('checkIn', {
         visitor: visitor,
         sentTime: sentTime,
         room: room,
-        message: "Entered",
+        message: 'Entered',
         socketId: socket.id,
       });
 
@@ -300,25 +313,25 @@ io.on("connection", (socket) => {
       if (occupants) {
         if (ack) {
           ack({
-            event: "onEnterRoom",
+            event: 'onEnterRoom',
             room: room,
             occupants: occupants,
             result: assertion,
-            emits: "checkIn",
+            emits: 'checkIn',
           });
         }
       } else {
         if (ack) {
           ack({
-            event: "onEnterRoom",
+            event: 'onEnterRoom',
             room: room,
             result: `Could not enter Room ${room}`,
-            emits: "nothing",
+            emits: 'nothing',
           });
         }
       }
     } catch (error) {
-      console.error("Oops, onEnterRoom() hit this:", error);
+      console.error('Oops, onEnterRoom() hit this:', error);
     } finally {
       console.groupEnd();
     }
@@ -331,7 +344,7 @@ io.on("connection", (socket) => {
 
     // handled by Room.checkOut()
     // sending to individual socketid (private message)
-    io.to(room).emit("checkOut", {
+    io.to(room).emit('checkOut', {
       visitor: visitor,
       sentTime: sentTime,
       room: room,
@@ -342,11 +355,11 @@ io.on("connection", (socket) => {
 
     const msg = `Using their own socket ${socket.id}, ${visitor.visitor} ${
       S.roomIdsIncludeSocket(room, socket.handshake.query.id)
-        ? "did not make it out of"
-        : "made it out of"
+        ? 'did not make it out of'
+        : 'made it out of'
     } Room ${room} on ${getNow()}`;
 
-    console.log(warn("leaveRoom():", msg));
+    console.log(warn('leaveRoom():', msg));
     if (ack) {
       ack(msg);
     }
@@ -401,17 +414,17 @@ io.on("connection", (socket) => {
   const onExposureWarning = (data, ack) => {
     try {
       const { visitor, warningsMap, reason } = data;
-      console.assert(visitor, "visitor cannot be empty");
+      console.assert(visitor, 'visitor cannot be empty');
       console.groupCollapsed(
         `[${getNow()}] EVENT: onExposureWarning from [${visitor.visitor}/${
           visitor.id
         }]`
       );
-      console.group("Open Rooms:");
+      console.group('Open Rooms:');
       console.log(printJson(S.openRooms));
       console.groupEnd();
 
-      console.group("Warning data:");
+      console.group('Warning data:');
       console.log(printJson(data));
       console.groupEnd();
 
@@ -419,7 +432,7 @@ io.on("connection", (socket) => {
 
       const warnings = new Map(warningsMap);
 
-      console.group("Mapped Warning data:");
+      console.group('Mapped Warning data:');
       console.log(printJson([...warnings]));
       console.groupEnd();
 
@@ -429,7 +442,7 @@ io.on("connection", (socket) => {
       warnings.forEach((exposureDates, room) => {
         results.push(
           S.sendOrPend({
-            event: "notifyRoom",
+            event: 'notifyRoom',
             room: room,
             reason: reason,
             exposureDates: exposureDates,
@@ -440,13 +453,13 @@ io.on("connection", (socket) => {
 
       if (ack) {
         ack({
-          handler: "onExposureWarning",
+          handler: 'onExposureWarning',
           result: results.flat(),
-          emits: "notifyRoom",
+          emits: 'notifyRoom',
         });
       }
     } catch (error) {
-      console.error("onExposureWarning sees:", error);
+      console.error('onExposureWarning sees:', error);
     } finally {
       console.groupEnd();
     }
@@ -466,7 +479,7 @@ io.on("connection", (socket) => {
           ack(
             new error(
               `${
-                message ? "Missing visitor identity" : "No message to process"
+                message ? 'Missing visitor identity' : 'No message to process'
               }`
             )
           );
@@ -476,7 +489,7 @@ io.on("connection", (socket) => {
 
       // send or cache the alert
       console.log(`${room} alerting ${visitor.visitor}`);
-      data.event = "exposureAlert";
+      data.event = 'exposureAlert';
       let result = S.sendOrPend(data);
       console.groupEnd();
 
@@ -484,7 +497,7 @@ io.on("connection", (socket) => {
         ack(result);
       }
     } catch (error) {
-      console.error("ERROR: onAlertVisitor sees:", error);
+      console.error('ERROR: onAlertVisitor sees:', error);
     } finally {
       console.groupEnd();
     }
@@ -497,56 +510,56 @@ io.on("connection", (socket) => {
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
   // Socket Events
   // Rooms send these events
-  socket.on("openRoom", onOpenRoom); // sent from Room for each visitor
-  socket.on("closeRoom", onCloseRoom);
+  socket.on('openRoom', onOpenRoom); // sent from Room for each visitor
+  socket.on('closeRoom', onCloseRoom);
   // (each Visitor warned each Room the date(s) Visitor occupied the Room)
-  socket.on("alertVisitor", onAlertVisitor);
+  socket.on('alertVisitor', onAlertVisitor);
 
   // sent from Visitor
   // Visitor sends this message:
   // {visitor:{name, id, nsp}, room:{room, id, nsp}, message:{}, sentTime: dateTime}
   // disambiguate enterRoom event from the event handler in the Room, checkIn
-  socket.on("enterRoom", onEnterRoom);
+  socket.on('enterRoom', onEnterRoom);
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
-  socket.on("leaveRoom", onLeaveRoom);
-  socket.on("exposureWarning", onExposureWarning);
+  socket.on('leaveRoom', onLeaveRoom);
+  socket.on('exposureWarning', onExposureWarning);
 
   // end Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
   // Admin events (for Room managers use)
 
-  socket.on("exposeAllSockets", (data, ack) => {
+  socket.on('exposeAllSockets', (data, ack) => {
     if (ack) {
       ack(S.sockets);
     }
   });
-  socket.on("exposeOpenRooms", (data, ack) => {
+  socket.on('exposeOpenRooms', (data, ack) => {
     if (ack) {
       ack(S.exposeOpenRooms());
     }
   });
-  socket.on("exposePendingWarnings", (data, ack) => {
+  socket.on('exposePendingWarnings', (data, ack) => {
     if (ack) {
       ack(S.pendingWarnings);
     }
   });
-  socket.on("exposeAvailableRooms", (data, ack) => {
+  socket.on('exposeAvailableRooms', (data, ack) => {
     if (ack) {
       ack(S.available);
     }
   });
-  socket.on("exposeVisitorsRooms", (data, ack) => {
+  socket.on('exposeVisitorsRooms', (data, ack) => {
     if (ack) {
       ack(S.visitors);
     }
   });
 
-  socket.on("pingServer", function (data, ack) {
+  socket.on('pingServer', function (data, ack) {
     if (ack) ack(`Server is at your disposal, ${data}`);
   });
 
-  socket.on("disconnect", (reason) => {
+  socket.on('disconnect', (reason) => {
     console.warn(
       `[${getNow()}] EVENT: disconnect: ${socket.id}/${
         socket.handshake.query.visitor || socket.handshake.query.room
@@ -555,19 +568,26 @@ io.on("connection", (socket) => {
     );
     console.log(`onDisconnect: Sockets at ${getNow()}:`);
     console.log(S.rawSockets);
+    if (
+      reason === 'client namespace disconnect' &&
+      socket.handshake.query.room
+    ) {
+      console.log(info('Updating Visitor Open Rooms list'));
+      S.exposeOpenRooms();
+    }
   });
 
-  socket.on("disconnecting", (reason) => {
-    console.log("Disconnecting");
+  socket.on('disconnecting', (reason) => {
+    console.log('Disconnecting');
     console.log(`Sockets at ${getNow()}:`);
     console.log(S.rawSockets);
   });
 });
 
-io.on("reconnect", (socket) => {
+io.on('reconnect', (socket) => {
   // immediately reconnection
   if (socket.handshake.query.id) {
-    console.log("...", S.handlePendings(socket.handshake.query));
+    console.log('...', S.handlePendings(socket.handshake.query));
 
     console.table(S.sockets);
   }
@@ -576,9 +596,9 @@ io.on("reconnect", (socket) => {
 //#endregion
 
 http.listen(port, function () {
-  let hostname = "http://localhost";
+  let hostname = 'http://localhost';
   console.log(info(`Server.js Build: ${version}`));
-  console.log(info(moment().format("llll")));
+  console.log(info(moment().format('llll')));
   console.log(info(`socket.io server listening on: ${hostname}:${port}`));
-  console.log(" ");
+  console.log(' ');
 });
