@@ -578,7 +578,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnecting', (reason) => {
-    console.log('Disconnecting');
+    console.log('Disconnecting because', reason);
     console.log(`Sockets at ${getNow()}:`);
     console.log(S.rawSockets);
   });
