@@ -22,13 +22,6 @@ io.engine.generateId = (req) => {
 // return LCT sockets only
 io.use(function (socket, next) {
   next(null, socket.handshake.query.id);
-  // var handshake = socket.request;
-  // if (socket.handshake.query.id) {
-  //   next(null, true);
-  // } else {
-  //   // next(new Error('Non-LCT socket'), false);
-  //   next(null, false);
-  // }
 });
 // io.set('authorization', function (handshake, callback) {
 //   callback(null, handshake._query.id);
@@ -123,9 +116,6 @@ function newSection(text) {
 
 // called when a connection changes
 io.on('connection', (socket) => {
-  // if (!socket.id) {
-  //   socket.disconnect(true);
-  // }
   const query = socket.handshake.query;
   newSection(`Handling a connection to ${socket.id}`);
 
@@ -141,12 +131,7 @@ io.on('connection', (socket) => {
     }
     onConnection(query);
   } else {
-    console.log(
-      error(`Unknown socket ${socket.id} (probably from client refresh).`)
-    );
-    // console.log(printJson(S.sockets));
-
-    // socket.disconnect(true);
+    console.log(error(`Unknown socket ${socket.id}.`));
   }
   //...........................................................................//
   //#region Listeners
