@@ -1,23 +1,12 @@
+//#region Initialize
 const http = require('http');
-
-// const hostname = "192.168.4.22";
-const hostname = 'localhost';
-const port = process.env.PORT || 3003;
-
 const server = http.createServer((req, res) => {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/plain');
   res.end('Welcome to LCT');
 });
 
-const url = require('url');
-const base64id = require('base64id');
-
-process.on('uncaughtException', (err) => {
-  console.error('There was an uncaught error', err);
-  process.exit(1); //mandatory (as per the Node.js docs)
-});
-
+// Socket.io Server
 const io = require('socket.io')(server);
 // overload to use passed in ID as socket.id
 io.engine.generateId = (req) => {
@@ -30,6 +19,31 @@ io.engine.generateId = (req) => {
   }
   return base64id.generateId();
 };
+// return LCT sockets only
+io.use(function (socket, next) {
+  next(null, socket.handshake.query.id);
+  // var handshake = socket.request;
+  // if (socket.handshake.query.id) {
+  //   next(null, true);
+  // } else {
+  //   // next(new Error('Non-LCT socket'), false);
+  //   next(null, false);
+  // }
+});
+// io.set('authorization', function (handshake, callback) {
+//   callback(null, handshake._query.id);
+// });
+
+const url = require('url');
+const base64id = require('base64id');
+// const hostname = "192.168.4.22";
+const hostname = 'localhost';
+const port = process.env.PORT || 3003;
+process.on('uncaughtException', (err) => {
+  console.error('There was an uncaught error', err);
+  process.exit(1); //mandatory (as per the Node.js docs)
+});
+//#endregion
 
 //#region Code
 
@@ -42,7 +56,7 @@ admin.on('connect', (socket) => {
 });
 //#endregion
 
-// set up Server Proxy
+//#region set up Server Proxy
 const { getNow, printJson, logResults, ServerProxy } = require('./radar');
 const S = new ServerProxy(io);
 
@@ -61,8 +75,6 @@ const bold = clc.bold;
 const moment = require('moment');
 
 const { version } = require('./package.json');
-
-// helpers
 
 function onConnection(query) {
   console.groupCollapsed(
@@ -104,16 +116,16 @@ function newSection(text) {
 [${getNow()}] ${text}`)
   );
 }
-// end helpers
+//#endregion setup
 
 // Heavy lifting below
 //=============================================================================//
 
 // called when a connection changes
 io.on('connection', (socket) => {
-  if (!socket.id) {
-    socket.disconnect(true);
-  }
+  // if (!socket.id) {
+  //   socket.disconnect(true);
+  // }
   const query = socket.handshake.query;
   newSection(`Handling a connection to ${socket.id}`);
 
@@ -132,9 +144,9 @@ io.on('connection', (socket) => {
     console.log(
       error(`Unknown socket ${socket.id} (probably from client refresh).`)
     );
-    console.log(printJson(S.sockets));
+    // console.log(printJson(S.sockets));
 
-    socket.disconnect(true);
+    // socket.disconnect(true);
   }
   //...........................................................................//
   //#region Listeners
