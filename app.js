@@ -14,15 +14,20 @@ io.engine.generateId = (req) => {
   const params = new URLSearchParams(parsedUrl.search);
   const prevId = params.get('id');
   // prevId is either a valid id or an empty string
-  if (prevId) {
+  if (!!prevId) {
     return prevId;
   }
   return base64id.generateId();
 };
 // return LCT sockets only
 io.use(function (socket, next) {
-  next(null, socket.handshake.query.id);
+  if (!socket.handshake.query.id) {
+    socket.handshake.query.id = socket.id;
+  }
+  next();
 });
+
+// Future Use:
 // io.set('authorization', function (handshake, callback) {
 //   callback(null, handshake._query.id);
 // });
