@@ -349,6 +349,7 @@ io.on('connection', (socket) => {
     });
 
     S.updateOccupancy(room);
+    console.log('Visitors:', printJson(S.visitors));
 
     const msg = `Using their own socket ${socket.id}, ${visitor.visitor} ${
       S.roomIdsIncludeSocket(room, socket.handshake.query.id)
@@ -358,12 +359,53 @@ io.on('connection', (socket) => {
 
     console.log(warn('leaveRoom():', msg));
     if (ack) {
+      console.log('Sending ACK msg to Visitor');
       ack(msg);
     }
     console.groupEnd();
   };
 
   //#endregion
+
+  socket.on('stepOneVisitorWarnsRooms', function (data, ack) {
+    const { visitor, warningsMap, reason } = data;
+    const warnings = new Map(warningsMap);
+
+    console.log(error(`stepOneWarningFromVisitor`));
+    console.log(error(printJson(data)));
+    let results = [];
+
+    warnings.forEach((exposureDates, room) => {
+      console.log(error(`Notifying ${room}`));
+      results.push(room);
+      S.stepMessage(room, 'stepTwoServerNotifiesRoom', {
+        room: room,
+        reason: reason,
+        exposureDates: exposureDates,
+        visitor: visitor.id,
+      });
+    });
+    if (ack) {
+      ack({
+        handler: 'stepOneVisitorWarnsRooms',
+        result: results.flat(),
+        emits: 'stepTwoServerNotifiesRoom',
+      });
+    }
+  });
+
+  // Penultimate step emitted by Room
+  socket.on('stepThreeServerFindsExposedVisitors', (exposures) => {
+    console.log('exposedVisitors', printJson('Exposures:', exposures));
+    const { exposedVisitors, room } = exposures;
+    exposedVisitors.forEach((visitor) => {
+      // Final step. This one sent to Visitor
+      S.stepMessage(visitor.id, 'stepFourServerAlertsVisitor', {
+        exposedVisitor: visitor,
+        room: room,
+      });
+    });
+  });
 
   //#region Warnings and Alerts
   /* Visitor sends this event containing all warnings for all exposed Rooms
@@ -417,16 +459,19 @@ io.on('connection', (socket) => {
           visitor.id
         }]`
       );
+      console.group('Available Rooms:');
+      console.log(printJson(S.available));
+      console.groupEnd();
       console.group('Open Rooms:');
       console.log(printJson(S.openRooms));
       console.groupEnd();
-
       console.group('Warning data:');
       console.log(printJson(data));
       console.groupEnd();
 
       let results = [];
 
+      // warningsMap is serializd, so deserialize in a new Map
       const warnings = new Map(warningsMap);
 
       console.group('Mapped Warning data:');

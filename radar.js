@@ -306,9 +306,14 @@ class ServerProxy {
   privateMessage(event, message) {
     console.info(`Emitting ${event} to ${message.room} with:`);
     console.log(printJson(message));
+    console.log('Visitors', printJson(this.visitors));
 
     // note: cannot attach callback to namespace broadcast event
     this.io.to(message.room).emit(event, message);
+  }
+
+  stepMessage(room, event, data) {
+    this.io.to(room).emit(event, data);
   }
 
   roomIdsIncludeSocket(roomName, id) {
