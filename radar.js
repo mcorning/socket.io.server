@@ -9,7 +9,7 @@ const info = clc.cyan;
 const highlight = clc.magenta;
 // globals
 let namespace = '/';
-let pendingWarnings = new Map();
+let pendingRoomWarnings = new Map();
 let pendingVisitorWarnings = new Map();
 
 const getNow = () => {
@@ -69,10 +69,8 @@ const logResults = (function () {
 })();
 
 class ServerProxy {
-  constructor(io, socket, pendingWarnings) {
+  constructor(io) {
     this.io = io;
-    this.socket = socket;
-    this.pendingWarnings = pendingWarnings;
   }
 
   get sockets() {
@@ -181,10 +179,10 @@ class ServerProxy {
         return 'ALERTED';
       } else {
         // cache the Visitor warning
-        pendingWarnings.set(visitor.id, data);
+        pendingRoomWarnings.set(visitor.id, data);
         console.warn(`${visitor.visitor} is offline. Caching event.`);
         console.group('Pending Warnings');
-        console.log(printJson([...pendingWarnings]));
+        console.log(printJson([...pendingRoomWarnings]));
         console.groupEnd();
 
         return 'PENDING';
@@ -204,7 +202,7 @@ class ServerProxy {
 
         return 'WARNED';
       } else {
-        pendingWarnings.set(room, {
+        pendingVisitorWarnings.set(room, {
           room: room,
           reason: reason,
           visitor: visitor,
@@ -212,7 +210,7 @@ class ServerProxy {
         });
         console.warn(`${room} is closed. Caching event.`);
         console.group('Pending Warnings');
-        console.log(printJson([...pendingWarnings]));
+        console.log(printJson([...pendingVisitorWarnings]));
         console.groupEnd();
 
         return 'PENDING';
@@ -220,21 +218,19 @@ class ServerProxy {
     }
   }
 
-  handlePendingWarnings(exposureDates, room) {
-    pendingVisitorWarnings.set(room, exposureDates);
-  }
-
   handlePendings(query) {
     console.log('Checking for pending warnings...');
 
-    console.log('Pending Warnings:', printJson([...pendingWarnings]));
-
     // handle Room
     if (query.room) {
+      console.log(
+        'Pending Visitor Warnings:',
+        printJson([...pendingVisitorWarnings])
+      );
       // record Room state
       query.closed = this.isOpen(query.id);
 
-      if (!pendingWarnings.has(query.room)) {
+      if (!pendingVisitorWarnings.has(query.room)) {
         let msg = `...Nothing pending for ${query.room} (which is ${
           this.isOpen(query.id) ? 'open' : 'closed'
         }).`;
@@ -242,32 +238,41 @@ class ServerProxy {
         return msg;
       }
 
-      pendingWarnings.forEach((value, key) => {
-        // value must contain destination of message
-        this.privateMessage('notifyRoom', value);
-        pendingWarnings.delete(key);
-        console.groupCollapsed(`Pending Warnings for ${query.room}:`);
+      console.log(
+        warn(
+          `Handling ${query.room}'s ${pendingVisitorWarnings.size} Pending Warnings:`
+        )
+      );
+      pendingVisitorWarnings.forEach((value, key) => {
+        // Room.vue expects this data:
+        // const { exposureDates, visitor, reason, room } = data;
 
-        console.log(warn(JSON.stringify(value, null, 3)));
-        console.groupEnd();
+        this.stepMessage(query.room, 'stepTwoServerNotifiesRoom', value);
+        pendingVisitorWarnings.delete(key);
+        console.log(warn(`Deleting ${value} pending warning`));
       });
     }
     // handle Visitor or Admin
     else if (query.visitor || query.admin) {
-      if (!pendingWarnings.size || !pendingWarnings.has(query.id)) {
+      console.log(
+        'Pending Visitor Warnings:',
+        printJson([...pendingRoomWarnings])
+      );
+
+      if (!pendingRoomWarnings.size || !pendingRoomWarnings.has(query.id)) {
         let msg = `...Nothing pending for Visitor ${query.visitor}`;
         console.log(msg);
         return msg;
       }
 
-      pendingWarnings.forEach((value, key) => {
+      pendingRoomWarnings.forEach((value, key) => {
         // const message = {
         //   visitor: key,
         //   exposureDates: value.message,
         //   room: '',
         // };
         this.privateMessage('exposureAlert', value);
-        pendingWarnings.delete(key);
+        pendingRoomWarnings.delete(key);
       });
     }
   }
@@ -318,12 +323,6 @@ class ServerProxy {
     this.io.to(message.room).emit(event, message);
   }
 
-  stepMessage(room, event, data) {
-    this.io.to(room).emit(event, data);
-    // this.socket.emit(event, data, ack);
-    // this.io.to(this.socket.id).emit(event, data);
-  }
-
   roomIdsIncludeSocket(roomName, id) {
     try {
       const result = this.rooms[roomName] && this.rooms[roomName].sockets[id];
@@ -369,8 +368,28 @@ class ServerProxy {
     this.socket.emit(payload.event, payload.message, payload.ack);
   }
 
-  removePendingVisitorWarning(room) {
+  setPendingVisitorWarning(data) {
+    console.log(warn(`Adding ${data.room} to pendingVisitorWarnings Map`));
+    console.log(warn(`pendingVisitorWarnings Map:`));
+    pendingVisitorWarnings.set(data.room, data);
+    console.log(warn(printJson([...pendingVisitorWarnings])));
+    console.log(' ');
+  }
+
+  stepMessage(room, event, data) {
+    console.log(
+      success(`Emitting: ${event} to ${room} with ${printJson(data)}`)
+    );
+    this.io.to(room).emit(event, data);
+  }
+
+  deletePendingVisitorWarning(room, caller) {
+    console.log(' ');
+    console.log(warn(caller, ':'));
+    console.log(warn(`Deleting ${room} to pendingVisitorWarnings Map`));
     pendingVisitorWarnings.delete(room);
+    console.log(warn([...pendingVisitorWarnings]));
+    console.log(' ');
   }
 }
 

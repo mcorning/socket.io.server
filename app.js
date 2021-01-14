@@ -74,8 +74,8 @@ const moment = require('moment');
 
 const { version } = require('./package.json');
 
-function onConnection(query, S) {
-  console.groupCollapsed(
+function onConnection(query) {
+  console.group(
     `EVENT: onConnection [${query.visitor || query.room || query.admin} / ${
       query.id
     }] ${query.closed ? 'Closed' : 'Open'}`
@@ -84,11 +84,11 @@ function onConnection(query, S) {
   query.result = result;
   console.log('Socket Room Pending State:', query.result);
 
-  console.group('Open Rooms:');
+  console.groupCollapsed('Open Rooms:');
   console.log(printJson(S.openRooms));
   console.groupEnd();
 
-  console.group('Visitors:');
+  console.groupCollapsed('Visitors:');
   console.log(printJson(S.visitors));
   console.groupEnd();
 
@@ -96,7 +96,7 @@ function onConnection(query, S) {
   // console.log(printJson(S.sockets));
   // console.groupEnd();
 
-  console.group('Available Rooms:');
+  console.groupCollapsed('Available Rooms:');
   console.log(printJson(S.available));
   console.groupEnd();
 
@@ -114,6 +114,8 @@ function newSection(text) {
 [${getNow()}] ${text}`)
   );
 }
+const S = new ServerProxy(io);
+
 //#endregion setup
 
 // Heavy lifting below
@@ -121,7 +123,6 @@ function newSection(text) {
 
 // called when a connection changes
 io.on('connection', (socket) => {
-  const S = new ServerProxy(io, socket);
   const query = socket.handshake.query;
   newSection(`Handling a connection to ${socket.id}`);
 
@@ -135,7 +136,7 @@ io.on('connection', (socket) => {
       console.log('Open Rooms:', printJson(S.exposeOpenRooms()));
       console.groupEnd();
     }
-    onConnection(query, S);
+    onConnection(query);
   } else {
     console.log(error(`Unknown socket ${socket.id}.`));
   }
@@ -372,13 +373,11 @@ io.on('connection', (socket) => {
     const { visitor, warningsMap, reason } = data;
     const warnings = new Map(warningsMap);
 
-    console.log(error(`stepOneWarningFromVisitor`));
-    console.log(error(printJson(data)));
+    console.log(error(`handling: stepOneWarningFromVisitor`));
+    console.log(error(`Exposure(s): ${printJson(data)}`));
     let results = [];
 
     warnings.forEach((exposureDates, room) => {
-      S.handlePendingWarnings(exposureDates, room);
-
       console.log(error(`Notifying ${room}`));
       results.push(room);
       const data = {
@@ -387,8 +386,15 @@ io.on('connection', (socket) => {
         exposureDates: exposureDates,
         visitor: visitor.id,
       };
+
+      // in case Room is offline, cache the warning(s)
+      S.setPendingVisitorWarning(data);
+
+      // if Room in online, it should handle this event and return a
+      // list of exposed visitors Server will handle below
+      // using the stepThreeServerFindsExposedVisitors listener
       S.stepMessage(room, 'stepTwoServerNotifiesRoom', data, (room) => {
-        S.removePendingVisitorWarning(room);
+        S.deletePendingVisitorWarning(room, 'ACK: stepTwoServerNotifiesRoom');
       });
     });
 
@@ -402,27 +408,35 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Penultimate step emitted by Room
-  socket.on(
-    'stepThreeServerFindsExposedVisitors',
-    (exposures, stepThreeServerFindsExposedVisitorsAck) => {
-      console.log('exposedVisitors', printJson('Exposures:', exposures));
-      const { exposedVisitors, room } = exposures;
-      console.log(S.removePendingVisitorWarning(room));
+  // stepTwoServerNotifiesRoom was handled by Room,
+  // and Room then emitted stepThreeServerFindsExposedVisitors
+  // which is acting like an ACK from stepTwoServerNotifiesRoom
+  socket.on('stepThreeServerFindsExposedVisitors', (exposures, ack) => {
+    console.log(
+      info(
+        `Hanling stepThreeServerFindsExposedVisitors: exposedVisitors: ${printJson(
+          exposures
+        )}`
+      )
+    );
+    const { exposedVisitors, room } = exposures;
 
-      exposedVisitors.forEach((visitor) => {
-        // Final step. This one sent to Visitor
-        S.stepMessage(visitor.id, 'stepFourServerAlertsVisitor', {
-          exposedVisitor: visitor,
-          room: room,
-        });
+    exposedVisitors.forEach((visitor) => {
+      // Final step. This one sent to Visitor
+      console.log(error('Handing off to Visitor'));
+      console.log(error(printJson(visitor)));
+      S.stepMessage(visitor.id, 'stepFourServerAlertsVisitor', {
+        exposedVisitor: visitor,
+        room: room,
       });
-    }
-  );
+    });
+    S.deletePendingVisitorWarning(room, 'stepThreeServerFindsExposedVisitors');
 
-  const stepThreeServerFindsExposedVisitorsAck = (data) => {
-    console.log(data);
-  };
+    // ack handled by Room.vue
+    if (ack) {
+      ack(exposedVisitors.length);
+    }
+  });
 
   //#region Warnings and Alerts
   /* Visitor sends this event containing all warnings for all exposed Rooms
@@ -598,9 +612,14 @@ io.on('connection', (socket) => {
       ack(S.exposeOpenRooms());
     }
   });
-  socket.on('exposePendingWarnings', (data, ack) => {
+  socket.on('exposePendingRoomWarnings', (data, ack) => {
     if (ack) {
-      ack(S.pendingWarnings);
+      ack(S.pendingRoomWarnings);
+    }
+  });
+  socket.on('exposePendingVistorWarnings', (data, ack) => {
+    if (ack) {
+      ack(S.pendingVisitorWarnings);
     }
   });
   socket.on('exposeAvailableRooms', (data, ack) => {
@@ -619,14 +638,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    console.warn(
-      `[${getNow()}] EVENT: disconnect: ${socket.id}/${
-        socket.handshake.query.visitor || socket.handshake.query.room
-      } disconnected. Reason:
-       ${reason}`
-    );
-    console.log(`onDisconnect: Sockets at ${getNow()}:`);
-    console.log(S.rawSockets);
     if (
       reason === 'client namespace disconnect' &&
       socket.handshake.query.room
@@ -637,9 +648,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnecting', (reason) => {
-    console.log('Disconnecting because', reason);
-    console.log(`Sockets at ${getNow()}:`);
-    console.log(S.rawSockets);
+    console.warn(`[${getNow()}] Disconnecting because`, reason);
+    console.warn(`Status of sockets at ${getNow()}`);
+    S.rawSockets.forEach((socket) => {
+      const { id, visitor, room } = socket[1].handshake.query;
+      console.warn(
+        '\t',
+        id,
+        visitor || room,
+        socket[1].connected ? 'connected' : 'disconnected'
+      );
+    });
   });
 });
 
