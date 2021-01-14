@@ -56,7 +56,7 @@ admin.on('connect', (socket) => {
 
 //#region set up Server Proxy
 const { getNow, printJson, logResults, ServerProxy } = require('./radar');
-const S = new ServerProxy(io);
+// const S = new ServerProxy(io);
 
 // other utilities
 const clc = require('cli-color');
@@ -74,7 +74,7 @@ const moment = require('moment');
 
 const { version } = require('./package.json');
 
-function onConnection(query) {
+function onConnection(query, S) {
   console.groupCollapsed(
     `EVENT: onConnection [${query.visitor || query.room || query.admin} / ${
       query.id
@@ -121,6 +121,7 @@ function newSection(text) {
 
 // called when a connection changes
 io.on('connection', (socket) => {
+  const S = new ServerProxy(io, socket);
   const query = socket.handshake.query;
   newSection(`Handling a connection to ${socket.id}`);
 
@@ -134,7 +135,7 @@ io.on('connection', (socket) => {
       console.log('Open Rooms:', printJson(S.exposeOpenRooms()));
       console.groupEnd();
     }
-    onConnection(query);
+    onConnection(query, S);
   } else {
     console.log(error(`Unknown socket ${socket.id}.`));
   }
@@ -376,15 +377,22 @@ io.on('connection', (socket) => {
     let results = [];
 
     warnings.forEach((exposureDates, room) => {
+      S.handlePendingWarnings(exposureDates, room);
+
       console.log(error(`Notifying ${room}`));
       results.push(room);
-      S.stepMessage(room, 'stepTwoServerNotifiesRoom', {
+      const data = {
         room: room,
         reason: reason,
         exposureDates: exposureDates,
         visitor: visitor.id,
+      };
+      S.stepMessage(room, 'stepTwoServerNotifiesRoom', data, (room) => {
+        S.removePendingVisitorWarning(room);
       });
     });
+
+    // ack handled by Visitor in warnRoomCard.vue
     if (ack) {
       ack({
         handler: 'stepOneVisitorWarnsRooms',
@@ -395,17 +403,26 @@ io.on('connection', (socket) => {
   });
 
   // Penultimate step emitted by Room
-  socket.on('stepThreeServerFindsExposedVisitors', (exposures) => {
-    console.log('exposedVisitors', printJson('Exposures:', exposures));
-    const { exposedVisitors, room } = exposures;
-    exposedVisitors.forEach((visitor) => {
-      // Final step. This one sent to Visitor
-      S.stepMessage(visitor.id, 'stepFourServerAlertsVisitor', {
-        exposedVisitor: visitor,
-        room: room,
+  socket.on(
+    'stepThreeServerFindsExposedVisitors',
+    (exposures, stepThreeServerFindsExposedVisitorsAck) => {
+      console.log('exposedVisitors', printJson('Exposures:', exposures));
+      const { exposedVisitors, room } = exposures;
+      console.log(S.removePendingVisitorWarning(room));
+
+      exposedVisitors.forEach((visitor) => {
+        // Final step. This one sent to Visitor
+        S.stepMessage(visitor.id, 'stepFourServerAlertsVisitor', {
+          exposedVisitor: visitor,
+          room: room,
+        });
       });
-    });
-  });
+    }
+  );
+
+  const stepThreeServerFindsExposedVisitorsAck = (data) => {
+    console.log(data);
+  };
 
   //#region Warnings and Alerts
   /* Visitor sends this event containing all warnings for all exposed Rooms

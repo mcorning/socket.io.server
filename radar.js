@@ -10,6 +10,7 @@ const highlight = clc.magenta;
 // globals
 let namespace = '/';
 let pendingWarnings = new Map();
+let pendingVisitorWarnings = new Map();
 
 const getNow = () => {
   return moment().format('HH:mm:ss:SSS:');
@@ -68,8 +69,9 @@ const logResults = (function () {
 })();
 
 class ServerProxy {
-  constructor(io, pendingWarnings) {
+  constructor(io, socket, pendingWarnings) {
     this.io = io;
+    this.socket = socket;
     this.pendingWarnings = pendingWarnings;
   }
 
@@ -218,6 +220,10 @@ class ServerProxy {
     }
   }
 
+  handlePendingWarnings(exposureDates, room) {
+    pendingVisitorWarnings.set(room, exposureDates);
+  }
+
   handlePendings(query) {
     console.log('Checking for pending warnings...');
 
@@ -314,6 +320,8 @@ class ServerProxy {
 
   stepMessage(room, event, data) {
     this.io.to(room).emit(event, data);
+    // this.socket.emit(event, data, ack);
+    // this.io.to(this.socket.id).emit(event, data);
   }
 
   roomIdsIncludeSocket(roomName, id) {
@@ -339,6 +347,7 @@ class ServerProxy {
     this.io.of(namespace).emit('openRoomsExposed', openRooms);
     return openRooms;
   }
+
   exposeAvailableRooms() {
     this.io.of(namespace).emit('availableRoomsExposed', this.available);
   }
@@ -354,6 +363,14 @@ class ServerProxy {
       return occupancy;
     }
     return 0;
+  }
+
+  emit(payload) {
+    this.socket.emit(payload.event, payload.message, payload.ack);
+  }
+
+  removePendingVisitorWarning(room) {
+    pendingVisitorWarnings.delete(room);
   }
 }
 
