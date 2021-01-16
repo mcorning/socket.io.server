@@ -80,9 +80,7 @@ function onConnection(query) {
       query.id
     }] ${query.closed ? 'Closed' : 'Open'}`
   );
-  let result = S.handlePendings(query);
-  query.result = result;
-  console.log('Socket Room Pending State:', query.result);
+  //let result = S.handlePendings(query);
 
   console.groupCollapsed('Open Rooms:');
   console.log(printJson(S.openRooms));
@@ -92,17 +90,9 @@ function onConnection(query) {
   console.log(printJson(S.visitors));
   console.groupEnd();
 
-  // console.group('Sockets:');
-  // console.log(printJson(S.sockets));
-  // console.groupEnd();
-
   console.groupCollapsed('Available Rooms:');
   console.log(printJson(S.available));
   console.groupEnd();
-
-  // console.group('Rooms:');
-  // console.log(printJson(S.rooms));
-  // console.groupEnd();
 
   console.groupEnd();
   S.exposeOpenRooms();
@@ -129,6 +119,7 @@ io.on('connection', (socket) => {
   if (query.id) {
     if (query.id != socket.id) {
       console.error(`Socket.id ${socket.id} != query.id ${query.id}`);
+      return;
     }
     if (query.room && !query.closed) {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
@@ -137,11 +128,12 @@ io.on('connection', (socket) => {
       console.groupEnd();
     }
     onConnection(query);
+    S.isVisitorPending(query.id);
   } else {
     console.log(error(`Unknown socket ${socket.id}.`));
   }
   //...........................................................................//
-  //#region Listeners
+  //#region Event Listeners
 
   //#region Open/Close Room
   // called by State Machine to bring a Room online
@@ -369,6 +361,7 @@ io.on('connection', (socket) => {
 
   //#endregion
 
+  //#region Exposure Protocol: Server
   socket.on('stepOneVisitorWarnsRooms', function (data, ack) {
     const { visitor, warningsMap, reason } = data;
     const warnings = new Map(warningsMap);
@@ -393,9 +386,7 @@ io.on('connection', (socket) => {
       // if Room in online, it should handle this event and return a
       // list of exposed visitors Server will handle below
       // using the stepThreeServerFindsExposedVisitors listener
-      S.stepMessage(room, 'stepTwoServerNotifiesRoom', data, (room) => {
-        S.deletePendingVisitorWarning(room, 'ACK: stepTwoServerNotifiesRoom');
-      });
+      S.stepMessage(room, 'stepTwoServerNotifiesRoom', data);
     });
 
     // ack handled by Visitor in warnRoomCard.vue
@@ -422,6 +413,12 @@ io.on('connection', (socket) => {
     const { exposedVisitors, room } = exposures;
 
     exposedVisitors.forEach((visitor) => {
+      const data = {
+        visitorId: visitor.id,
+        room: room,
+      };
+      S.setPendingRoomAlerts(data);
+
       // Final step. This one sent to Visitor
       console.log(error('Handing off to Visitor'));
       console.log(error(printJson(visitor)));
@@ -438,7 +435,24 @@ io.on('connection', (socket) => {
     }
   });
 
-  //#region Warnings and Alerts
+  // stepThreeServerFindsExposedVisitors was handled by Visitor,
+  // and Visitor then emitted stepFiveVisitorReceivedAlert
+  // which is acting like an ACK from stepThreeServerFindsExposedVisitors
+  socket.on('stepFiveVisitorReceivedAlert', (visitorId, ack) => {
+    console.log(
+      info(`Hanling stepThreeServerFindsExposedVisitors for ${visitorId}`)
+    );
+
+    S.deletePendingRoomAlerts(visitorId);
+
+    // ack handled by Visitor.vue
+    if (ack) {
+      ack('Alert deleted on server');
+    }
+  });
+  //#endregion
+
+  //#region Deprecated Warnings and Alerts
   /* Visitor sends this event containing all warnings for all exposed Rooms
   // Warning data:
   // {
@@ -580,8 +594,8 @@ io.on('connection', (socket) => {
   //#endregion end listeners
   //...........................................................................//
 
+  //#region Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
-  // Socket Events
   // Rooms send these events
   socket.on('openRoom', onOpenRoom); // sent from Room for each visitor
   socket.on('closeRoom', onCloseRoom);
@@ -599,8 +613,9 @@ io.on('connection', (socket) => {
 
   // end Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+  //#endregion
 
-  // Admin events (for Room managers use)
+  //#region  Admin events (for Room managers use)
 
   socket.on('exposeAllSockets', (data, ack) => {
     if (ack) {
@@ -612,9 +627,9 @@ io.on('connection', (socket) => {
       ack(S.exposeOpenRooms());
     }
   });
-  socket.on('exposePendingRoomWarnings', (data, ack) => {
+  socket.on('exposePendingRoomAlerts', (data, ack) => {
     if (ack) {
-      ack(S.pendingRoomWarnings);
+      ack(S.pendingRoomAlerts);
     }
   });
   socket.on('exposePendingVistorWarnings', (data, ack) => {
