@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link
+      href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css"
+      rel="stylesheet"
+    />
+
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <script type="text/x-template" id="app-template">
+      <v-app>
+        <v-container>
+          <v-card>
+            <v-card-title>Admin.Lct</v-card-title>
+            <v-card-subtitle>{{socketId}}</v-card-subtitle>
+
+          </v-card>
+          <!-- -->
+        </v-container>
+      </v-app>
+    </script>
+
+    <div id="app"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- <script src="./main.js"></script> -->
+    <script>
+      const socket = io();
+
+      socket.on('connect', () => {
+        app.socketId = socket.id;
+      });
+
+      var app = new Vue({
+        vuetify: new Vuetify(),
+
+        el: '#app',
+        template: '#app-template',
+
+        data: {
+          socketId: 'not connected',
+        },
+        methods: {},
+      });
+
+      // const App = {
+      //   template: '#app-template',
+      //   data: () => ({
+      //     socketId: 'not connected',
+      //     //
+      //   }),
+      // };
+
+      // new Vue({
+      //   vuetify: new Vuetify(),
+      //   render: (h) => h(App),
+      // }).$mount('#app');
+    </script>
+  </body>
+</html>

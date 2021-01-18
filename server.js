@@ -1,16 +1,15 @@
-// jshint esversion: 6
-
 // express code
 
 const express = require('express');
 const app = express();
 
-const http = require('http').Server(app);
+const server = require('http').Server(app);
 
 app.use(express.static(__dirname));
-
+const adminFile = __dirname + '/vue3/admin.html';
 app.get('/', function (req, res) {
-  res.sendFile(__dirname + '/index.html');
+  console.log(req.query);
+  res.sendFile(adminFile);
 });
 process.on('uncaughtException', (err) => {
   console.error('There was an uncaught error', err);
@@ -18,26 +17,40 @@ process.on('uncaughtException', (err) => {
 });
 // end express code
 
-// setup Socket.io Server and Proxy
-const url = require('url');
-const base64id = require('base64id');
-const port = process.env.PORT || 3003;
-const io = require('socket.io')(http);
+// Socket.io Server
+const io = require('socket.io')(server);
 // overload to use passed in ID as socket.id
 io.engine.generateId = (req) => {
   const parsedUrl = new url.parse(req.url);
   const params = new URLSearchParams(parsedUrl.search);
   const prevId = params.get('id');
   // prevId is either a valid id or an empty string
-  if (prevId) {
-    console.log('prevId:', prevId);
+  if (!!prevId) {
     return prevId;
   }
-  const id = base64id.generateId();
-  console.log('new ID:', id);
-
-  return null;
+  return base64id.generateId();
 };
+// return LCT sockets only
+io.use(function (socket, next) {
+  if (!socket.handshake.query.id) {
+    socket.handshake.query.id = socket.id;
+  }
+  next();
+});
+
+// Future Use:
+// io.set('authorization', function (handshake, callback) {
+//   callback(null, handshake._query.id);
+// });
+
+const url = require('url');
+const base64id = require('base64id');
+// const hostname = "192.168.4.22";
+const hostname = 'localhost';
+const port = process.env.PORT || 3003;
+
+//#endregion
+
 //#region Code
 
 //#region Admin tests: code to be extended soon
@@ -49,9 +62,9 @@ admin.on('connect', (socket) => {
 });
 //#endregion
 
-// set up Server Proxy
+//#region set up Server Proxy
 const { getNow, printJson, logResults, ServerProxy } = require('./radar');
-const S = new ServerProxy(io);
+// const S = new ServerProxy(io);
 
 // other utilities
 const clc = require('cli-color');
@@ -69,37 +82,25 @@ const moment = require('moment');
 
 const { version } = require('./package.json');
 
-// helpers
-
 function onConnection(query) {
-  console.groupCollapsed(
+  console.group(
     `EVENT: onConnection [${query.visitor || query.room || query.admin} / ${
       query.id
     }] ${query.closed ? 'Closed' : 'Open'}`
   );
-  let result = S.handlePendings(query);
-  query.result = result;
-  console.log('Socket Room Pending State:', query.result);
+  //let result = S.handlePendings(query);
 
-  console.group('Open Rooms:');
+  console.groupCollapsed('Open Rooms:');
   console.log(printJson(S.openRooms));
   console.groupEnd();
 
-  console.group('Visitors:');
+  console.groupCollapsed('Visitors:');
   console.log(printJson(S.visitors));
   console.groupEnd();
 
-  // console.group('Sockets:');
-  // console.log(printJson(S.sockets));
-  // console.groupEnd();
-
-  console.group('Available Rooms:');
+  console.groupCollapsed('Available Rooms:');
   console.log(printJson(S.available));
   console.groupEnd();
-
-  // console.group('Rooms:');
-  // console.log(printJson(S.rooms));
-  // console.groupEnd();
 
   console.groupEnd();
   S.exposeOpenRooms();
@@ -111,22 +112,22 @@ function newSection(text) {
 [${getNow()}] ${text}`)
   );
 }
-// end helpers
+const S = new ServerProxy(io);
+
+//#endregion setup
 
 // Heavy lifting below
 //=============================================================================//
 
 // called when a connection changes
 io.on('connection', (socket) => {
-  if (!socket.id) {
-    socket.disconnect(true);
-  }
   const query = socket.handshake.query;
   newSection(`Handling a connection to ${socket.id}`);
 
   if (query.id) {
     if (query.id != socket.id) {
       console.error(`Socket.id ${socket.id} != query.id ${query.id}`);
+      return;
     }
     if (query.room && !query.closed) {
       console.groupCollapsed(`[${getNow()}] Reopening ${query.room}`);
@@ -135,17 +136,12 @@ io.on('connection', (socket) => {
       console.groupEnd();
     }
     onConnection(query);
+    S.isVisitorPending(query.id);
   } else {
-    console.log(
-      error(`Unknown socket ${socket.id} (probably from client refresh).`)
-    );
-    console.log(printJson(S.sockets));
-
-    socket.disconnect(true);
+    console.log(error(`Unknown socket ${socket.id}.`));
   }
-
   //...........................................................................//
-  //#region Listeners
+  //#region Event Listeners
 
   //#region Open/Close Room
   // called by State Machine to bring a Room online
@@ -158,8 +154,10 @@ io.on('connection', (socket) => {
       const { room, id } = socket.handshake.query;
 
       if (!room) {
-        console.error(
-          `${id} is not an LCT Room socket. No further processing possible.`
+        console.log(
+          error(
+            `${id} is not an LCT Room socket. No further processing possible.`
+          )
         );
         return;
       }
@@ -190,7 +188,7 @@ io.on('connection', (socket) => {
       console.log(`...and after ${data.room} opens`);
 
       console.log(printJson(S.exposeOpenRooms()));
-      console.log('Emitted exposeOpenRooms event');
+      console.log('Emitted exposeOpenRooms event ');
 
       console.log('Visitors');
       console.log(printJson(S.visitors));
@@ -222,6 +220,7 @@ io.on('connection', (socket) => {
     }
   };
 
+  // If Room closes, all occupants must leave the Room first
   const onCloseRoom = function (data, ack) {
     try {
       const { room, id, nsp } = data;
@@ -352,6 +351,7 @@ io.on('connection', (socket) => {
     });
 
     S.updateOccupancy(room);
+    console.log('Visitors:', printJson(S.visitors));
 
     const msg = `Using their own socket ${socket.id}, ${visitor.visitor} ${
       S.roomIdsIncludeSocket(room, socket.handshake.query.id)
@@ -361,6 +361,7 @@ io.on('connection', (socket) => {
 
     console.log(warn('leaveRoom():', msg));
     if (ack) {
+      console.log('Sending ACK msg to Visitor');
       ack(msg);
     }
     console.groupEnd();
@@ -368,7 +369,98 @@ io.on('connection', (socket) => {
 
   //#endregion
 
-  //#region Warnings and Alerts
+  //#region Exposure Protocol: Server
+  socket.on('stepOneVisitorWarnsRooms', function (data, ack) {
+    const { visitor, warningsMap, reason } = data;
+    const warnings = new Map(warningsMap);
+
+    console.log(error(`handling: stepOneWarningFromVisitor`));
+    console.log(error(`Exposure(s): ${printJson(data)}`));
+    let results = [];
+
+    warnings.forEach((exposureDates, room) => {
+      console.log(error(`Notifying ${room}`));
+      results.push(room);
+      const data = {
+        room: room,
+        reason: reason,
+        exposureDates: exposureDates,
+        visitor: visitor.id,
+      };
+
+      // in case Room is offline, cache the warning(s)
+      S.setPendingVisitorWarning(data);
+
+      // if Room in online, it should handle this event and return a
+      // list of exposed visitors Server will handle below
+      // using the stepThreeServerFindsExposedVisitors listener
+      S.stepMessage(room, 'stepTwoServerNotifiesRoom', data);
+    });
+
+    // ack handled by Visitor in warnRoomCard.vue
+    if (ack) {
+      ack({
+        handler: 'stepOneVisitorWarnsRooms',
+        result: results.flat(),
+        emits: 'stepTwoServerNotifiesRoom',
+      });
+    }
+  });
+
+  // stepTwoServerNotifiesRoom was handled by Room,
+  // and Room then emitted stepThreeServerFindsExposedVisitors
+  // which is acting like an ACK from stepTwoServerNotifiesRoom
+  socket.on('stepThreeServerFindsExposedVisitors', (exposures, ack) => {
+    console.log(
+      info(
+        `Hanling stepThreeServerFindsExposedVisitors: exposedVisitors: ${printJson(
+          exposures
+        )}`
+      )
+    );
+    const { exposedVisitors, room } = exposures;
+
+    exposedVisitors.forEach((visitor) => {
+      const data = {
+        visitorId: visitor.id,
+        room: room,
+      };
+      S.setPendingRoomAlerts(data);
+
+      // Final step. This one sent to Visitor
+      console.log(error('Handing off to Visitor'));
+      console.log(error(printJson(visitor)));
+      S.stepMessage(visitor.id, 'stepFourServerAlertsVisitor', {
+        exposedVisitor: visitor,
+        room: room,
+      });
+    });
+    S.deletePendingVisitorWarning(room, 'stepThreeServerFindsExposedVisitors');
+
+    // ack handled by Room.vue
+    if (ack) {
+      ack(exposedVisitors.length);
+    }
+  });
+
+  // stepThreeServerFindsExposedVisitors was handled by Visitor,
+  // and Visitor then emitted stepFiveVisitorReceivedAlert
+  // which is acting like an ACK from stepThreeServerFindsExposedVisitors
+  socket.on('stepFiveVisitorReceivedAlert', (visitorId, ack) => {
+    console.log(
+      info(`Hanling stepThreeServerFindsExposedVisitors for ${visitorId}`)
+    );
+
+    S.deletePendingRoomAlerts(visitorId);
+
+    // ack handled by Visitor.vue
+    if (ack) {
+      ack('Alert deleted on server');
+    }
+  });
+  //#endregion
+
+  //#region Deprecated Warnings and Alerts
   /* Visitor sends this event containing all warnings for all exposed Rooms
   // Warning data:
   // {
@@ -420,16 +512,19 @@ io.on('connection', (socket) => {
           visitor.id
         }]`
       );
+      console.group('Available Rooms:');
+      console.log(printJson(S.available));
+      console.groupEnd();
       console.group('Open Rooms:');
       console.log(printJson(S.openRooms));
       console.groupEnd();
-
       console.group('Warning data:');
       console.log(printJson(data));
       console.groupEnd();
 
       let results = [];
 
+      // warningsMap is serializd, so deserialize in a new Map
       const warnings = new Map(warningsMap);
 
       console.group('Mapped Warning data:');
@@ -507,8 +602,8 @@ io.on('connection', (socket) => {
   //#endregion end listeners
   //...........................................................................//
 
+  //#region Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
-  // Socket Events
   // Rooms send these events
   socket.on('openRoom', onOpenRoom); // sent from Room for each visitor
   socket.on('closeRoom', onCloseRoom);
@@ -526,8 +621,9 @@ io.on('connection', (socket) => {
 
   // end Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+  //#endregion
 
-  // Admin events (for Room managers use)
+  //#region  Admin events (for Room managers use)
 
   socket.on('exposeAllSockets', (data, ack) => {
     if (ack) {
@@ -539,9 +635,14 @@ io.on('connection', (socket) => {
       ack(S.exposeOpenRooms());
     }
   });
-  socket.on('exposePendingWarnings', (data, ack) => {
+  socket.on('exposePendingRoomAlerts', (data, ack) => {
     if (ack) {
-      ack(S.pendingWarnings);
+      ack(S.pendingRoomAlerts);
+    }
+  });
+  socket.on('exposePendingVistorWarnings', (data, ack) => {
+    if (ack) {
+      ack(S.pendingVisitorWarnings);
     }
   });
   socket.on('exposeAvailableRooms', (data, ack) => {
@@ -560,14 +661,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', (reason) => {
-    console.warn(
-      `[${getNow()}] EVENT: disconnect: ${socket.id}/${
-        socket.handshake.query.visitor || socket.handshake.query.room
-      } disconnected. Reason:
-       ${reason}`
-    );
-    console.log(`onDisconnect: Sockets at ${getNow()}:`);
-    console.log(S.rawSockets);
     if (
       reason === 'client namespace disconnect' &&
       socket.handshake.query.room
@@ -578,9 +671,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnecting', (reason) => {
-    console.log('Disconnecting because', reason);
-    console.log(`Sockets at ${getNow()}:`);
-    console.log(S.rawSockets);
+    console.warn(`[${getNow()}] Disconnecting because`, reason);
+    console.warn(`Status of sockets at ${getNow()}`);
+    S.rawSockets.forEach((socket) => {
+      const { id, visitor, room } = socket[1].handshake.query;
+      console.warn(
+        '\t',
+        id,
+        visitor || room,
+        socket[1].connected ? 'connected' : 'disconnected'
+      );
+    });
   });
 });
 
@@ -595,10 +696,9 @@ io.on('reconnect', (socket) => {
 
 //#endregion
 
-http.listen(port, function () {
-  let hostname = 'http://localhost';
+server.listen(port, hostname, () => {
   console.log(info(`Server.js Build: ${version}`));
   console.log(info(moment().format('llll')));
-  console.log(info(`socket.io server listening on: ${hostname}:${port}`));
+  console.log(`Server running at http://${hostname}:${port}/`);
   console.log(' ');
 });

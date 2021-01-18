@@ -689,9 +689,8 @@ io.on('reconnect', (socket) => {
 //#endregion
 
 server.listen(port, hostname, () => {
-  //http://192.168.4.22:8081/
   console.log(info(`App.js Build: ${version}`));
   console.log(info(moment().format('llll')));
-  console.log(`Server running at http://${hostname}:${port}/`);
+  console.log(`App running at http://${hostname}:${port}/`);
   console.log(' ');
 });
