@@ -22,7 +22,7 @@
       <v-app>
         <v-container>
           <v-card>
-            <v-card-title>Soteria Local Contact Tracing</v-card-title>
+            <v-card-title>Local Contact Tracing Portal</v-card-title>
             <v-card-subtitle
               >A novel solution to a novel coronavirus.</v-card-subtitle
             >
@@ -49,31 +49,36 @@
               </v-list-item>
 
             </v-card-text>
-
+          </v-card>
+          <v-card>
             <v-card-text>
-
               <v-subheader>To use LCT, call on the PWAs:</v-subheader>
-              <v-list-item two-line>
-                <v-list-item-content>
-                  <v-list-item-title
-                    ><a href="https://roomlct.z22.web.core.windows.net/"
-                      >Room.Lct</a
-                    ></v-list-item-title
-                  >
-                  <v-list-item-subtitle>Room app</v-list-item-subtitle>
-                  <v-list-item-subtitle>Used by public spaces</v-list-item-subtitle>
-                </v-list-item-content>
-                <v-list-item-content>
-                  <v-list-item-title
-                    ><a href="https://lctvisitor.z22.web.core.windows.net/"
-                      >Visitor.Lct</a
-                    ></v-list-item-title
-                  >
-                  <v-list-item-subtitle>Visitor app</v-list-item-subtitle>
-                  <v-list-item-subtitle>Used by Visitors to public spaces</v-list-item-subtitle>
+              <v-list>
+                <v-list-item
+                  v-for="item in items"
+                  :key="item.title"
+                >
 
-                </v-list-item-content>
-              </v-list-item>
+                  <v-list-item-content>
+                    <v-list-item-subtitle v-text="item.asset"></v-list-item-subtitle>
+                  </v-list-item-content>
+
+                  <v-list-item-content>
+                    <v-list-item-subtitle
+                      ><a :href="item.link"
+                      v-text="item.title"
+                        ></a
+                      ></v-list-item-subtitle
+                    >
+                  </v-list-item-content>
+
+                  <v-list-item-avatar tile size=100 >
+                    <v-img :src="item.avatar"></v-img>
+                  </v-list-item-avatar>
+                </v-list-item>
+              </v-list>
+
+
             </v-card-text>
             <v-card-text>
               Questions, comments, volunteers: contact lead dev <a href="mailto://mcorning@soteriaInstitute.org">Michael Corning, Soteria Institute</a>
@@ -95,7 +100,20 @@
         template: '#app-template',
 
         data: {
-          socketId: 'not connected',
+          items: [
+            {
+              asset: 'Used by public spaces',
+              title: 'Room App',
+              link: 'https://roomlct.z22.web.core.windows.net/',
+              avatar: './vue3/assets/room.qr.jpg',
+            },
+            {
+              asset: 'Used by Visitors to public spaces',
+              title: 'Visitor App',
+              link: 'https://lctvisitor.z22.web.core.windows.net/',
+              avatar: './vue3/assets/visitor.qr.jpg',
+            },
+          ],
         },
         methods: {},
       });
