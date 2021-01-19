@@ -1,20 +1,104 @@
-<h1>Soteria Local Contact Tracing</h1>
-<p>This server serves the LCT app on port 3003.</p>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link
+      href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css"
+      rel="stylesheet"
+    />
 
-<p>General access points:</p>
-<ul>
-  <li>
-    <a href="vue3/onboard.html">Onboarding portal</a>
-  </li>
-  <li>
-    <a href="vue3/admin.html">Admin portal</a>
-  </li>
-</ul>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <script type="text/x-template" id="app-template">
+      <v-app>
+        <v-container>
+          <v-card>
+            <v-card-title>Soteria Local Contact Tracing</v-card-title>
+            <v-card-subtitle
+              >A novel solution to a novel coronavirus.</v-card-subtitle
+            >
+            <v-card-text>
 
-To use LCT, call on the PWAs:
-<ul>
-  <li><a href="https://roomlct.z22.web.core.windows.net/">Room.Lct</a></li>
-  <li>
-    <a href="https://lctvisitor.z22.web.core.windows.net/">Visitor.Lct</a>
-  </li>
-</ul>
+              <v-subheader>General (read-only) access points:</v-subheader>
+              <v-list-item three-line>
+                <v-list-item-content>
+                  <v-list-item-title
+                    ><a href="vue3/onboard.html">Onboarding portal</a></v-list-item-title
+                  >
+                  <v-list-item-subtitle>Explore Local Contact Tracting</v-list-item-subtitle>
+                  <v-list-item-subtitle>Learn how to setup and use LCT</v-list-item-subtitle>
+                </v-list-item-content>
+                <v-list-item-content>
+                  <v-list-item-title
+                              <a href="vue3/admin.html">Admin portal</a>
+                </v-list-item-title
+                  >
+                  <v-list-item-subtitle>Administrative Dashboard</v-list-item-subtitle>
+                  <v-list-item-subtitle>Access restricted to LCT Admins</v-list-item-subtitle>
+
+                </v-list-item-content>
+              </v-list-item>
+
+            </v-card-text>
+
+            <v-card-text>
+
+              <v-subheader>To use LCT, call on the PWAs:</v-subheader>
+              <v-list-item two-line>
+                <v-list-item-content>
+                  <v-list-item-title
+                    ><a href="https://roomlct.z22.web.core.windows.net/"
+                      >Room.Lct</a
+                    ></v-list-item-title
+                  >
+                  <v-list-item-subtitle>Room app</v-list-item-subtitle>
+                  <v-list-item-subtitle>Used by public spaces</v-list-item-subtitle>
+                </v-list-item-content>
+                <v-list-item-content>
+                  <v-list-item-title
+                    ><a href="https://lctvisitor.z22.web.core.windows.net/"
+                      >Visitor.Lct</a
+                    ></v-list-item-title
+                  >
+                  <v-list-item-subtitle>Visitor app</v-list-item-subtitle>
+                  <v-list-item-subtitle>Used by Visitors to public spaces</v-list-item-subtitle>
+
+                </v-list-item-content>
+              </v-list-item>
+            </v-card-text>
+            <v-card-text>
+              Questions, comments, volunteers: contact lead dev <a href="mailto://mcorning@soteriaInstitute.org">Michael Corning, Soteria Institute</a>
+            </v-card-text>
+          </v-card>
+        </v-container>
+      </v-app>
+    </script>
+
+    <div id="app"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+
+    <script>
+      const app = new Vue({
+        vuetify: new Vuetify(),
+        el: '#app',
+        template: '#app-template',
+
+        data: {
+          socketId: 'not connected',
+        },
+        methods: {},
+      });
+    </script>
+  </body>
+</html>

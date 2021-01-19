@@ -20,11 +20,13 @@
   <body>
     <script type="text/x-template" id="app-template">
       <v-app>
-        <v-container>
-          <v-card>
-            <v-card-title>Admin.Lct</v-card-title>
-            <v-card-subtitle>{{socketId}}</v-card-subtitle>
-
+        <v-container >
+          <v-card color='#F44336' class='white--text'>
+            <v-card-title> Admin.Lct</v-card-title>
+            <v-card-subtitle  class='white--text'>ACCESS RESTRICTED TO LCT ADMINS</v-card-subtitle>
+          </v-card>
+          <v-card >
+            <v-card-text >Please return to the <a href="../index.html">LCT Portal</a></v-card-text>
           </v-card>
           <!-- -->
         </v-container>
@@ -38,50 +40,50 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-            const socket = io();
+      const socket = io();
 
-            socket.on('connect', () => {
-              app.socketId = socket.id;
-            });
+      socket.on('connect', () => {
+        app.socketId = socket.id;
+      });
 
-            var app = new Vue({
-              vuetify: new Vuetify(Vuetify({
-        theme: {
-          themes: {
-            light: {
-              primary: colors[color].darken2,
-              secondary: colors[color].lighten3,
-              accent: colors.shades.black,
-              error: colors.red.accent3,
-            },
-            dark: {
-              primary: colors.blue.lighten3,
+      var app = new Vue({
+        vuetify: new Vuetify({
+          theme: {
+            themes: {
+              light: {
+                primary: '#2196F3',
+                secondary: '#90CAF9',
+                // accent: colors.shades.black,
+                // error: colors.red.accent3,
+              },
+              dark: {
+                primary: '#CE93D8',
+              },
             },
           },
+        }),
+
+        el: '#app',
+        template: '#app-template',
+
+        data: {
+          socketId: 'not connected',
         },
-      }),
+        methods: {},
+      });
 
-              el: '#app',
-              template: '#app-template',
+      // const App = {
+      //   template: '#app-template',
+      //   data: () => ({
+      //     socketId: 'not connected',
+      //     //
+      //   }),
+      // };
 
-              data: {
-                socketId: 'not connected',
-              },
-              methods: {},
-            });
-
-            // const App = {
-            //   template: '#app-template',
-            //   data: () => ({
-            //     socketId: 'not connected',
-            //     //
-            //   }),
-            // };
-
-            // new Vue({
-            //   vuetify: new Vuetify(),
-            //   render: (h) => h(App),
-            // }).$mount('#app');
+      // new Vue({
+      //   vuetify: new Vuetify(),
+      //   render: (h) => h(App),
+      // }).$mount('#app');
     </script>
   </body>
 </html>
