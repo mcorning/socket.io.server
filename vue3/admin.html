@@ -37,38 +37,51 @@
     <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
 
     <script src="/socket.io/socket.io.js"></script>
-    <!-- <script src="./main.js"></script> -->
     <script>
-      const socket = io();
+            const socket = io();
 
-      socket.on('connect', () => {
-        app.socketId = socket.id;
-      });
+            socket.on('connect', () => {
+              app.socketId = socket.id;
+            });
 
-      var app = new Vue({
-        vuetify: new Vuetify(),
-
-        el: '#app',
-        template: '#app-template',
-
-        data: {
-          socketId: 'not connected',
+            var app = new Vue({
+              vuetify: new Vuetify(Vuetify({
+        theme: {
+          themes: {
+            light: {
+              primary: colors[color].darken2,
+              secondary: colors[color].lighten3,
+              accent: colors.shades.black,
+              error: colors.red.accent3,
+            },
+            dark: {
+              primary: colors.blue.lighten3,
+            },
+          },
         },
-        methods: {},
-      });
+      }),
 
-      // const App = {
-      //   template: '#app-template',
-      //   data: () => ({
-      //     socketId: 'not connected',
-      //     //
-      //   }),
-      // };
+              el: '#app',
+              template: '#app-template',
 
-      // new Vue({
-      //   vuetify: new Vuetify(),
-      //   render: (h) => h(App),
-      // }).$mount('#app');
+              data: {
+                socketId: 'not connected',
+              },
+              methods: {},
+            });
+
+            // const App = {
+            //   template: '#app-template',
+            //   data: () => ({
+            //     socketId: 'not connected',
+            //     //
+            //   }),
+            // };
+
+            // new Vue({
+            //   vuetify: new Vuetify(),
+            //   render: (h) => h(App),
+            // }).$mount('#app');
     </script>
   </body>
 </html>

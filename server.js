@@ -6,10 +6,10 @@ const app = express();
 const server = require('http').Server(app);
 
 app.use(express.static(__dirname));
-const adminFile = __dirname + '/vue3/admin.html';
+
 app.get('/', function (req, res) {
   console.log(req.query);
-  res.sendFile(adminFile);
+  res.sendFile(req.query);
 });
 process.on('uncaughtException', (err) => {
   console.error('There was an uncaught error', err);
