@@ -21,6 +21,9 @@
     <script type="text/x-template" id="app-template">
       <v-app>
         <v-container>
+                  <v-col cols="auto" align="center">
+          <soteria-icon />
+        </v-col>
           <v-card>
             <v-card-title>Local Contact Tracing Portal</v-card-title>
             <v-card-subtitle
@@ -94,6 +97,8 @@
     <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
 
     <script>
+      import SoteriaIcon from 'safeInSistersLogo.vue';
+
       const app = new Vue({
         vuetify: new Vuetify(),
         el: '#app',
