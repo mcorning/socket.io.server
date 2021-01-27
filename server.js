@@ -18,6 +18,7 @@ process.on('uncaughtException', (err) => {
 // end express code
 
 // Socket.io Server
+let namespace = '/';
 const io = require('socket.io')(server);
 // overload to use passed in ID as socket.id
 io.engine.generateId = (req) => {
@@ -53,8 +54,8 @@ const port = process.env.PORT || 3003;
 
 //#region Code
 
-//#region Admin tests: code to be extended soon
-const admin = io.of('/admin');
+//#region Admin tests: 
+const admin = io.of(namespace);
 admin.on('connect', (socket) => {
   console.warn('admin socket.id:', socket.id);
 
