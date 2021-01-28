@@ -1,0 +1,784 @@
+[
+  [
+    {
+      "nodes": [
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "identity": 3,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 2
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "identity": 0,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 1
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "identity": 0,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 1
+        },
+        {
+          "identity": 2,
+          "properties": {},
+          "type": "guards",
+          "start": 1,
+          "end": 2
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 6,
+          "properties": {},
+          "type": "connects_to",
+          "start": 0,
+          "end": 3
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        },
+        {
+          "identity": 6,
+          "properties": {},
+          "type": "connects_to",
+          "start": 0,
+          "end": 3
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 2,
+          "properties": {},
+          "type": "guards",
+          "start": 1,
+          "end": 2
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        },
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        },
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "identity": 3,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 2
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        },
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "identity": 0,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 1
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        },
+        {
+          "identity": 4,
+          "properties": {},
+          "type": "secret_door_to",
+          "start": 0,
+          "end": 4
+        },
+        {
+          "identity": 0,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 1
+        },
+        {
+          "identity": 2,
+          "properties": {},
+          "type": "guards",
+          "start": 1,
+          "end": 2
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 0,
+          "properties": {
+            "name": "The Den of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 3,
+          "properties": {
+            "name": "The Antechamber of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 6,
+          "properties": {},
+          "type": "connects_to",
+          "start": 0,
+          "end": 3
+        },
+        {
+          "identity": 5,
+          "properties": {},
+          "type": "connects_to",
+          "start": 3,
+          "end": 0
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 3,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 2
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 0,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 1
+        }
+      ]
+    }
+  ],
+  [
+    {
+      "nodes": [
+        {
+          "identity": 4,
+          "properties": {
+            "name": "The Secret Room of the Ogre King"
+          },
+          "labels": [
+            "room"
+          ]
+        },
+        {
+          "identity": 1,
+          "properties": {
+            "name": "Ralph the Ogre King",
+            "xp": 1200
+          },
+          "labels": [
+            "monster"
+          ]
+        },
+        {
+          "identity": 2,
+          "properties": {
+            "name": "coins",
+            "gp": 750
+          },
+          "labels": [
+            "treasure"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "identity": 0,
+          "properties": {},
+          "type": "contains",
+          "start": 4,
+          "end": 1
+        },
+        {
+          "identity": 2,
+          "properties": {},
+          "type": "guards",
+          "start": 1,
+          "end": 2
+        }
+      ]
+    }
+  ]
+]

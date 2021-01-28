@@ -22,8 +22,6 @@ try {
       graph.query("CREATE (:visitor{name:'ship',id:3})"),
       graph.query("CREATE (:visitor{name:'renee',id:6})"),
       graph.query("CREATE (:room{name:'Fika',id:4})   "),
-      //         CREATE (:room{name:'RES',id:1289)
-
       graph.query("CREATE (:room{name:'SCC',id:5})"),
       graph.query(
         "MATCH (a:visitor), (b:room) WHERE (a.name = 'mpc' AND b.name='Fika' ) CREATE (a)-[:visits{date:'1/26'}]->(b)",
