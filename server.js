@@ -15,9 +15,9 @@ process.on('uncaughtException', (err) => {
   console.error('There was an uncaught error', err);
   process.exit(1); //mandatory (as per the Node.js docs)
 });
-// end express code
+//#endregion end express code
 
-// Socket.io Server
+//#region Socket.io Server initialization
 let namespace = '/';
 const io = require('socket.io')(server);
 // overload to use passed in ID as socket.id
@@ -39,25 +39,23 @@ io.use(function (socket, next) {
   next();
 });
 
-// Future Use:
-// io.set('authorization', function (handshake, callback) {
-//   callback(null, handshake._query.id);
-// });
-
 const url = require('url');
 const base64id = require('base64id');
 const hostname = 'localhost';
 const port = process.env.PORT || 3003;
 
-//#endregion
-
-//#region Admin tests:
+//#region Future Use:
+// io.set('authorization', function (handshake, callback) {
+//   callback(null, handshake._query.id);
+// });
 const admin = io.of(namespace);
 admin.on('connect', (socket) => {
   console.warn('admin socket.id:', socket.id);
 
   socket.on('message', (data) => console.log(data));
 });
+//#endregion
+
 //#endregion
 
 //#region set up Server Proxy
@@ -112,9 +110,9 @@ function newSection(text) {
 }
 const S = new ServerProxy(io);
 
-//#endregion setup
+//#endregion setup server proxy
 
-//#region Heavy lifting below
+//#region socket.io server code
 //=============================================================================//
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
@@ -138,8 +136,6 @@ io.on('connection', (socket) => {
     console.log(error(`Unknown socket ${socket.id}.`));
   }
   //...........................................................................//
-  //#region Event Listeners
-
   //#region Open/Close Room
   // called by State Machine to bring a Room online
   // so that Visitors can enter
@@ -457,47 +453,6 @@ io.on('connection', (socket) => {
   });
   //#endregion
 
-  //#region Deprecated Warnings and Alerts
-  /* Visitor sends this event containing all warnings for all exposed Rooms
-  // Warning data:
-  // {
-  //    "sentTime": "2020-11-18T16:07:52.336Z",
-  //    "visitor": {
-  //       "$id": "oTFyI-JZyKBS5jNYAAAA",
-  //       "visitor": "You",
-  //       "id": "oTFyI-JZyKBS5jNYAAAA",
-  //       "nsp": "enduringNet"
-  //    },
-  //    "warnings": {
-  //       "fika": {
-  //          "room": "fika",
-  //          "dates": [
-  //             "2020-11-17",
-  //             "2020-11-17"
-  //          ]
-  //       }
-  //    }
-// }
-{
-   "sentTime": "2020-11-24T19:52:55.693Z",
-   "visitor": {
-      "$id": "-DfaxawFa31U2rn2AAAB",
-      "visitor": "MichaelUK",
-      "id": "-DfaxawFa31U2rn2AAAB",
-      "nsp": "enduringNet"
-   },
-   "reason": "LCT warned me of possible exposure",
-   "warningsMap": [
-      [
-         "DS301",
-         [
-            "2020-11-24"
-         ]
-      ]
-   ]
-}
-*/
-
   // sent by Visitor
   // server handles the Visitor's exposureWarning with a notifyRoom event so Room can take over
   const onExposureWarning = (data, ack) => {
@@ -594,7 +549,6 @@ io.on('connection', (socket) => {
       console.groupEnd();
     }
   }
-  //#endregion
   //...........................................................................//
 
   //#region Socket Events
@@ -679,6 +633,7 @@ io.on('connection', (socket) => {
     });
   });
 });
+//#endregion
 
 io.on('reconnect', (socket) => {
   // immediately reconnection
@@ -688,8 +643,6 @@ io.on('reconnect', (socket) => {
     console.table(S.sockets);
   }
 });
-
-//#endregion
 
 server.listen(port, hostname, () => {
   console.log(info(`Server.js Build: ${version}`));
