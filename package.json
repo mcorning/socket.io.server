@@ -16,11 +16,10 @@
     "moment": "^2.27.0",
     "nodemon": "^2.0.6",
     "redisgraph.js": "^2.2.1",
-    "socket.io": "^1.7.3"
+    "socket.io": "^2.4.0"
   },
   "scripts": {
-    "startApp": "node app",
     "startServer": "node server",
-    "monitor": "nodemon app"
+    "monitor": "nodemon server"
   }
 }

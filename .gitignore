@@ -2,6 +2,9 @@
 node_modules
 /dist
 /backup
+/redis
+/vue3
+app.js
 
 # local env files
 .env.local
