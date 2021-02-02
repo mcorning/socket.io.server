@@ -1,4 +1,4 @@
-// express code
+//#region express code
 
 const express = require('express');
 const app = express();
@@ -46,15 +46,12 @@ io.use(function (socket, next) {
 
 const url = require('url');
 const base64id = require('base64id');
-// const hostname = "192.168.4.22";
 const hostname = 'localhost';
 const port = process.env.PORT || 3003;
 
 //#endregion
 
-//#region Code
-
-//#region Admin tests: 
+//#region Admin tests:
 const admin = io.of(namespace);
 admin.on('connect', (socket) => {
   console.warn('admin socket.id:', socket.id);
@@ -117,12 +114,11 @@ const S = new ServerProxy(io);
 
 //#endregion setup
 
-// Heavy lifting below
+//#region Heavy lifting below
 //=============================================================================//
-
-// called when a connection changes
 io.on('connection', (socket) => {
   const query = socket.handshake.query;
+
   newSection(`Handling a connection to ${socket.id}`);
 
   if (query.id) {
@@ -599,8 +595,6 @@ io.on('connection', (socket) => {
     }
   }
   //#endregion
-
-  //#endregion end listeners
   //...........................................................................//
 
   //#region Socket Events
@@ -703,3 +697,4 @@ server.listen(port, hostname, () => {
   console.log(`Server running at http://${hostname}:${port}/`);
   console.log(' ');
 });
+//#endregion
