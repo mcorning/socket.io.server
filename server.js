@@ -3,14 +3,14 @@
 const express = require('express');
 const app = express();
 
-const server = require('http').Server(app);
-
 app.use(express.static(__dirname));
 
-app.get('/', function (req, res) {
-  console.log(req.query);
-  res.sendFile(req.query);
+const http = require('http').createServer(app);
+
+app.get('/', (req, res) => {
+  res.sendFile('index.html');
 });
+
 process.on('uncaughtException', (err) => {
   console.error('There was an uncaught error', err);
   process.exit(1); //mandatory (as per the Node.js docs)
@@ -19,7 +19,8 @@ process.on('uncaughtException', (err) => {
 
 //#region Socket.io Server initialization
 let namespace = '/';
-const io = require('socket.io')(server);
+const io = require('socket.io')(http);
+// const io = require('socket.io')(server);
 // overload to use passed in ID as socket.id
 io.engine.generateId = (req) => {
   const parsedUrl = new url.parse(req.url);
@@ -644,10 +645,12 @@ io.on('reconnect', (socket) => {
   }
 });
 
-server.listen(port, hostname, () => {
+http.listen(port, hostname, () => {
   console.log(info(`Server.js Build: ${version}`));
   console.log(info(moment().format('llll')));
-  console.log(`Server running at http://${hostname}:${port}/`);
+  console.log(
+    `Server running at http://${hostname}:${port}/ (click for web app)`
+  );
   console.log(' ');
 });
 //#endregion
