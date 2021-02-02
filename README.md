@@ -1,20 +1,27 @@
-# socket.io.server
+# LCT socket.io.server
 
 The is the server half of Local Contact Tracing.
 
 This is a socket.io server for managing messages passed between Visitors and Rooms.
 
-## Development Environment
+LCT client-side code is in this repo: [prototyping](https://github.com/mcorning/prototyping.git)
+
+That repo contains two branches:
+
+* **visitor**
+* **room**
+
+## Server Development Environment
 
 To run the server in Visual Studio Code:
 
-1. Open the socket.io.server folder
+1. Open the `socket.io.server` folder
 2. Select the Explorer from the Side Bar
 3. Start the server 
    1. from NPM SCRIPTS (if visible)
-   2. from the Terminal with the command `node .`
+   2. from the Terminal with the command `node server`
 
-## Production Environment
+## Server Production Environment
 
 To remote into the Ubuntu VM:
  
@@ -26,11 +33,17 @@ You should see three windows:
 
   ![Ubuntu Remote](./docs/Ubuntu%20Remote.jpg)
 
-  Use the top left window to pull the latest build from the repo.
+  ### Git
 
-  This will restart the server.js file in the left window.
+  Use one window to pull the latest build from the repo. Because the server is running under nodemon, each new pull restarts the server.
 
-  You can see the client access points in the browswer.
+  ### NodeJS
+
+  Use the other window to run the server using this command:
+  
+  `nodemon server`
+  
+  Click the link at the bottom of this window to see the web app that gives you access to working client code.
 
 ## Files
 
@@ -61,3 +74,6 @@ The protocol consists in five steps:
 4. `stepFourServerAlertsVisitor`
 5. `stepFiveVisitorReceivedAlert`
 
+### Radar.js
+
+The radar.js code wraps the socket.io interfaces. As its name implies, radar.js can do complicated or subtle things for you merely by asking. For example, it offers a `sockets` property that uses a complex query to render relevant socket data. It also has an `openRooms()` property that joins data from the socket.io interface.
