@@ -379,7 +379,7 @@ io.on('connection', (socket) => {
         room: room,
         reason: reason,
         exposureDates: exposureDates,
-        visitor: visitor.id,
+        visitor: visitor,
       };
 
       // in case Room is offline, cache the warning(s)
@@ -407,7 +407,7 @@ io.on('connection', (socket) => {
   socket.on('stepThreeServerFindsExposedVisitors', (exposures, ack) => {
     console.log(
       info(
-        `Hanling stepThreeServerFindsExposedVisitors: exposedVisitors: ${printJson(
+        `Handling stepThreeServerFindsExposedVisitors: exposedVisitors: ${printJson(
           exposures
         )}`
       )
@@ -441,9 +441,7 @@ io.on('connection', (socket) => {
   // and Visitor then emitted stepFiveVisitorReceivedAlert
   // which is acting like an ACK from stepThreeServerFindsExposedVisitors
   socket.on('stepFiveVisitorReceivedAlert', (visitorId, ack) => {
-    console.log(
-      info(`Hanling stepThreeServerFindsExposedVisitors for ${visitorId}`)
-    );
+    console.log(info(`Handling stepFiveVisitorReceivedAlert for ${visitorId}`));
 
     S.deletePendingRoomAlerts(visitorId);
 
@@ -621,7 +619,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnecting', (reason) => {
-    console.warn(`[${getNow()}] Disconnecting because`, reason);
+    const query = socket.handshake.query;
+    console.warn(
+      `[${getNow()}] ${query.room || query.visitor} disconnecting because`,
+      reason
+    );
     console.warn(`Status of sockets at ${getNow()}`);
     S.rawSockets.forEach((socket) => {
       const { id, visitor, room } = socket[1].handshake.query;

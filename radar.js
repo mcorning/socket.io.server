@@ -355,6 +355,7 @@ class ServerProxy {
   roomIsOnline(id) {
     return this.io.nsps[namespace].adapter.nsp.sockets[id];
   }
+
   socketIsOnline(id) {
     return this.io.nsps[namespace].sockets[id];
   }
@@ -412,14 +413,14 @@ class ServerProxy {
   deletePendingVisitorWarning(room, caller) {
     console.log(' ');
     console.log(warn(caller, ':'));
-    console.log(warn(`Deleting ${room} to this.pendingVisitorWarnings Map`));
+    console.log(warn(`Deleting ${room} from this.pendingVisitorWarnings Map`));
     this.pendingVisitorWarnings.delete(room);
     console.log(warn([...this.pendingVisitorWarnings]));
     console.log(' ');
   }
 
   deletePendingRoomAlerts(visitorId) {
-    console.log(warn(`Deleting ${visitorId} to pendingRoomAlerts Map`));
+    console.log(warn(`Deleting ${visitorId} from pendingRoomAlerts Map`));
     this.pendingRoomAlerts.delete(visitorId);
     console.log(warn([...this.pendingRoomAlerts]));
     console.log(' ');
