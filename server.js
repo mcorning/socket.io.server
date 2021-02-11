@@ -45,6 +45,8 @@ const base64id = require('base64id');
 const hostname = 'localhost';
 const port = process.env.PORT || 3003;
 
+// TODO this needs to be dynamic
+let nsp = 'sisters';
 //#region Future Use:
 // io.set('authorization', function (handshake, callback) {
 //   callback(null, handshake._query.id);
@@ -56,6 +58,18 @@ admin.on('connect', (socket) => {
   socket.on('message', (data) => console.log(data));
 });
 //#endregion
+
+//#endregion
+
+//#region RedisGraph setup
+const RedisGraph = require('redisgraph.js').Graph;
+// TODO options nedds to be dynamic
+const options = {
+  host: 'redis-11939.c60.us-west-1-2.ec2.cloud.redislabs.com',
+  port: 11939,
+  password: '7B3DId42aDCtMjmSXg7VN0XZSMOItGAG',
+};
+const graph = new RedisGraph(nsp, null, null, options);
 
 //#endregion
 
@@ -387,7 +401,7 @@ io.on('connection', (socket) => {
 
       // if Room in online, it should handle this event and return a
       // list of exposed visitors Server will handle below
-      // using the stepThreeServerFindsExposedVisitors listener
+      // using the stepThreeRoomListsVisitorsForServer listener
       S.stepMessage(room, 'stepTwoServerNotifiesRoom', data);
     });
 
@@ -402,12 +416,12 @@ io.on('connection', (socket) => {
   });
 
   // stepTwoServerNotifiesRoom was handled by Room,
-  // and Room then emitted stepThreeServerFindsExposedVisitors
+  // and Room then emitted stepThreeRoomListsVisitorsForServer
   // which is acting like an ACK from stepTwoServerNotifiesRoom
-  socket.on('stepThreeServerFindsExposedVisitors', (exposures, ack) => {
+  socket.on('stepThreeRoomListsVisitorsForServer', (exposures, ack) => {
     console.log(
       info(
-        `Handling stepThreeServerFindsExposedVisitors: exposedVisitors: ${printJson(
+        `Handling stepThreeRoomListsVisitorsForServer: exposedVisitors: ${printJson(
           exposures
         )}`
       )
@@ -429,7 +443,7 @@ io.on('connection', (socket) => {
         room: room,
       });
     });
-    S.deletePendingVisitorWarning(room, 'stepThreeServerFindsExposedVisitors');
+    S.deletePendingVisitorWarning(room, 'stepThreeRoomListsVisitorsForServer');
 
     // ack handled by Room.vue
     if (ack) {
@@ -437,9 +451,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // stepThreeServerFindsExposedVisitors was handled by Visitor,
+  // stepThreeRoomListsVisitorsForServer was handled by Visitor,
   // and Visitor then emitted stepFiveVisitorReceivedAlert
-  // which is acting like an ACK from stepThreeServerFindsExposedVisitors
+  // which is acting like an ACK from stepThreeRoomListsVisitorsForServer
   socket.on('stepFiveVisitorReceivedAlert', (visitorId, ack) => {
     console.log(info(`Handling stepFiveVisitorReceivedAlert for ${visitorId}`));
 
@@ -454,6 +468,17 @@ io.on('connection', (socket) => {
 
   // sent by Visitor
   // server handles the Visitor's exposureWarning with a notifyRoom event so Room can take over
+  const onAddVisit = (data, ack) => {
+    console.log('query:', data);
+    graph.query(data).then((x) => {
+      const results = `query returns: ${printJson(x)}`;
+      console.log(results);
+      if (ack) {
+        ack(printJson(results));
+      }
+    });
+  };
+
   const onExposureWarning = (data, ack) => {
     try {
       const { visitor, warningsMap, reason } = data;
@@ -552,13 +577,9 @@ io.on('connection', (socket) => {
 
   //#region Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
-  // Rooms send these events
-  socket.on('openRoom', onOpenRoom); // sent from Room for each visitor
-  socket.on('closeRoom', onCloseRoom);
-  // (each Visitor warned each Room the date(s) Visitor occupied the Room)
-  socket.on('alertVisitor', onAlertVisitor);
 
   // sent from Visitor
+  socket.on('addVisit', onAddVisit);
   // Visitor sends this message:
   // {visitor:{name, id, nsp}, room:{room, id, nsp}, message:{}, sentTime: dateTime}
   // disambiguate enterRoom event from the event handler in the Room, checkIn
@@ -566,6 +587,12 @@ io.on('connection', (socket) => {
   // disambiguate leaveRoom event from the event handler in the Room, checkOut
   socket.on('leaveRoom', onLeaveRoom);
   socket.on('exposureWarning', onExposureWarning);
+
+  // Rooms send these events
+  socket.on('openRoom', onOpenRoom); // sent from Room for each visitor
+  socket.on('closeRoom', onCloseRoom);
+  // (each Visitor warned each Room the date(s) Visitor occupied the Room)
+  socket.on('alertVisitor', onAlertVisitor);
 
   // end Socket Events
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//

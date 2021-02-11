@@ -70,7 +70,7 @@ The Socket.io Server code has two responsiblities:
 The protocol consists in five steps:
 1. `stepOneWarningFromVisitor`
 2. `stepTwoServerNotifiesRoom`
-3. `stepThreeServerFindsExposedVisitors`
+3. `stepThreeRoomListsVisitorsForServer`
 4. `stepFourServerAlertsVisitor`
 5. `stepFiveVisitorReceivedAlert`
 

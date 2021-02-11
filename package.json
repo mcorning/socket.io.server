@@ -2,7 +2,7 @@
   "name": "socket.io.server",
   "version": "02.02.22.02",
   "description": "",
-  "main": "app.js",
+  "main": "server.js",
   "keywords": [],
   "author": "",
   "license": "ISC",
