@@ -1,6 +1,6 @@
 {
   "name": "socket.io.server",
-  "version": "02.02.22.02",
+  "version": "02.12.12",
   "description": "",
   "main": "server.js",
   "keywords": [],

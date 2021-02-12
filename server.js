@@ -468,13 +468,13 @@ io.on('connection', (socket) => {
 
   // sent by Visitor
   // server handles the Visitor's exposureWarning with a notifyRoom event so Room can take over
-  const onAddVisit = (data, ack) => {
+  const onLogVisit = (data, ack) => {
     console.log('query:', data);
-    graph.query(data).then((x) => {
-      const results = `query returns: ${printJson(x)}`;
-      console.log(results);
+    graph.query(data).then((results) => {
+      const stats = results._statistics._raw;
+      console.log(`stats: ${printJson(stats)}`);
       if (ack) {
-        ack(printJson(results));
+        ack(stats);
       }
     });
   };
@@ -579,7 +579,7 @@ io.on('connection', (socket) => {
   //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
   // sent from Visitor
-  socket.on('addVisit', onAddVisit);
+  socket.on('logVisit', onLogVisit);
   // Visitor sends this message:
   // {visitor:{name, id, nsp}, room:{room, id, nsp}, message:{}, sentTime: dateTime}
   // disambiguate enterRoom event from the event handler in the Room, checkIn
