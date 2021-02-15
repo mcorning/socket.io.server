@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 
-// app.use(express.static(path.join(__dirname, './dist')));
+app.use(express.static(path.join(__dirname, './dist')));
 
 const http = require('http').createServer(app);
 
@@ -47,7 +47,7 @@ io.use(function (socket, next) {
 
 const url = require('url');
 const base64id = require('base64id');
-const hostname = process.env.hostname || 'localhost';
+const hostname = 'localhost'; //process.env.hostname || 'localhost';
 const port = process.env.PORT || 3003;
 
 // TODO this needs to be dynamic
@@ -679,7 +679,7 @@ io.on('reconnect', (socket) => {
   }
 });
 
-app.use(express.static(path.join(__dirname, './lct-b')));
+// app.use(express.static(path.join(__dirname, './lct-b')));
 // app.use('/lct-b', express.static(path.join(__dirname, './dist/lct-b')));
 
 // app.use('/dist', express.static('lct-a-visitor'));
