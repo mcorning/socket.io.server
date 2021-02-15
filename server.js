@@ -5,13 +5,16 @@ const path = require('path');
 
 const app = express();
 
-app.use(express.static(path.join(__dirname, './dist')));
+// app.use(express.static(path.join(__dirname, './dist')));
 
 const http = require('http').createServer(app);
 
 app.get('/', (req, res) => {
   res.sendFile('index.html');
 });
+// app.get('/lct-b', (req, res) => {
+//   res.sendFile('dist/lct-b/index.html');
+// });
 
 process.on('uncaughtException', (err) => {
   console.error('There was an uncaught error', err);
@@ -675,6 +678,10 @@ io.on('reconnect', (socket) => {
     console.table(S.sockets);
   }
 });
+
+app.use('/dist', express.static('lct-b'));
+app.use('/dist', express.static('lct-a-visitor'));
+app.use('/dist', express.static('lct-a-room'));
 
 http.listen(port, hostname, () => {
   console.log(info(`Server.js Build: ${version}`));
