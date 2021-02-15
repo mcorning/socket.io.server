@@ -684,12 +684,13 @@ io.on('reconnect', (socket) => {
 
 // app.use('/dist', express.static('lct-a-visitor'));
 // app.use('/dist', express.static('lct-a-room'));
-
-http.listen(port, hostname, () => {
+console.log(process.env.hostname);
+http.listen(process.env.port, () => {
   console.log(info(`Server.js Build: ${version}`));
   console.log(info(moment().format('llll')));
   console.log(
-    `Server running at http://${hostname}:${port}/ (click for web app)`
+    // `Server running at http://${hostname}:${port}/ (click for web app)`
+    `Server running on port ${port}`
   );
   console.log(' ');
 });
