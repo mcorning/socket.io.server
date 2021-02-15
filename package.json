@@ -19,7 +19,10 @@
     "socket.io": "^2.4.0"
   },
   "scripts": {
-    "startServer": "node server",
+    "start": "node server",
     "monitor": "nodemon server"
+  },
+  "engines": {
+    "node": "14.x"
   }
 }
