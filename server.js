@@ -47,7 +47,7 @@ io.use(function (socket, next) {
 
 const url = require('url');
 const base64id = require('base64id');
-const hostname = 'localhost';
+const hostname = process.env.hostname || 'localhost';
 const port = process.env.PORT || 3003;
 
 // TODO this needs to be dynamic
