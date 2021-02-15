@@ -679,9 +679,9 @@ io.on('reconnect', (socket) => {
   }
 });
 
-app.use('/dist', express.static('lct-b'));
-app.use('/dist', express.static('lct-a-visitor'));
-app.use('/dist', express.static('lct-a-room'));
+app.use(express.static(path.join(__dirname, './dist/lct-b')));
+// app.use('/dist', express.static('lct-a-visitor'));
+// app.use('/dist', express.static('lct-a-room'));
 
 http.listen(port, hostname, () => {
   console.log(info(`Server.js Build: ${version}`));
