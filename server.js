@@ -679,7 +679,9 @@ io.on('reconnect', (socket) => {
   }
 });
 
-app.use(express.static(path.join(__dirname, './dist/lct-b')));
+// app.use(express.static(path.join(__dirname, './dist/lct-b')));
+app.use('/lct-b', express.static(path.join(__dirname, './dist/lct-b')));
+
 // app.use('/dist', express.static('lct-a-visitor'));
 // app.use('/dist', express.static('lct-a-room'));
 
