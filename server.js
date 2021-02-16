@@ -7,16 +7,7 @@ const path = require('path');
 
 const app = express();
 
-app.use(express.static(path.join(__dirname, './dist')));
-
 const http = require('http').createServer(app);
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-// app.get('/lct-b', (req, res) => {
-//   res.sendFile('dist/lct-b/index.html');
-// });
 
 process.on('uncaughtException', (err) => {
   console.error('There was an uncaught error', err);
@@ -684,7 +675,7 @@ const port = process.env.PORT || 3003;
 
 app.use(serveStatic(path.join(__dirname, './dist')));
 
-http.listen(process.env.PORT, () => {
+http.listen(port, () => {
   console.log(info(`Server.js Build: ${version}`));
   console.log(info(moment().format('llll')));
   console.log(`Server running on http://${hostname}:${port}`);
