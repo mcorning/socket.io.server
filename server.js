@@ -1,6 +1,8 @@
 //#region express code
 
 const express = require('express');
+const serveStatic = require('serve-static');
+
 const path = require('path');
 
 const app = express();
@@ -10,7 +12,7 @@ app.use(express.static(path.join(__dirname, './dist')));
 const http = require('http').createServer(app);
 
 app.get('/', (req, res) => {
-  res.sendFile('index.html');
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 // app.get('/lct-b', (req, res) => {
 //   res.sendFile('dist/lct-b/index.html');
@@ -47,8 +49,6 @@ io.use(function (socket, next) {
 
 const url = require('url');
 const base64id = require('base64id');
-const hostname = process.env.hostname || 'localhost';
-const port = process.env.PORT || 3003;
 
 // TODO this needs to be dynamic
 let nsp = 'sisters';
@@ -679,15 +679,15 @@ io.on('reconnect', (socket) => {
   }
 });
 
-// app.use(express.static(path.join(__dirname, './lct-b')));
-// app.use('/lct-b', express.static(path.join(__dirname, './dist/lct-b')));
+const hostname = process.env.HOSTNAME || 'localhost';
+const port = process.env.PORT || 3003;
 
-// app.use('/dist', express.static('lct-a-visitor'));
-// app.use('/dist', express.static('lct-a-room'));
-http.listen(process.env.port, () => {
+app.use(serveStatic(path.join(__dirname, './dist')));
+
+http.listen(process.env.PORT, () => {
   console.log(info(`Server.js Build: ${version}`));
   console.log(info(moment().format('llll')));
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running on http://${hostname}:${port}`);
   console.log(' ');
 });
 //#endregion
