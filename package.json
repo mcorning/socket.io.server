@@ -1,6 +1,6 @@
 {
   "name": "socket.io.server",
-  "version": "02.16.15",
+  "version": "02.18.13",
   "description": "",
   "main": "server.js",
   "keywords": [],
@@ -20,8 +20,6 @@
     "socket.io": "^2.4.0"
   },
   "scripts": {
-    "postinstall": "npm run build",
-    "postinstallP": "if test \"$NODE_ENV\" = \"production\" ; then npm run build ; fi ",
     "start": "node server",
     "monitor": "nodemon server"
   },
